@@ -3,7 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -11,21 +12,23 @@
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
+        <!-- Header -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Universal Secure Bypass"
             android:textSize="24sp"
             android:textStyle="bold"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="16dp" />
 
+        <!-- Status Section -->
         <TextView
             android:id="@+id/tvStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Checking status..."
             android:textSize="18sp"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="8dp" />
 
         <TextView
             android:id="@+id/tvMode"
@@ -33,25 +36,66 @@
             android:layout_height="wrap_content"
             android:text="Mode: Detecting..."
             android:textSize="16sp"
-            android:layout_marginBottom="32dp" />
+            android:textStyle="italic"
+            android:layout_marginBottom="16dp" />
 
+        <TextView
+            android:id="@+id/tvInstructions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="14sp"
+            android:padding="12dp"
+            android:background="@android:color/white"
+            android:elevation="2dp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Mode Selection (for testing) -->
         <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp"
+            android:gravity="center">
+
+            <Button
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Root Mode"
+                android:onClick="onRootModeClicked"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="LSPatch Mode"
+                android:onClick="onLSPatchModeClicked" />
+
+        </LinearLayout>
+
+        <!-- Rooted Mode Settings -->
+        <LinearLayout
+            android:id="@+id/llRootSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:layout_marginBottom="24dp"
             android:padding="16dp"
             android:background="@android:color/white"
-            android:elevation="4dp">
+            android:elevation="4dp"
+            android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Module Settings"
+                android:text="Rooted Mode Settings"
                 android:textSize="20sp"
                 android:textStyle="bold"
                 android:layout_marginBottom="16dp" />
 
+            <!-- Bypass FLAG_SECURE -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -72,6 +116,7 @@
 
             </LinearLayout>
 
+            <!-- Bypass DRM -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -92,6 +137,7 @@
 
             </LinearLayout>
 
+            <!-- Prevent Black Screens -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -112,6 +158,7 @@
 
             </LinearLayout>
 
+            <!-- Show Notifications -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -132,6 +179,7 @@
 
             </LinearLayout>
 
+            <!-- Hook System Apps -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -152,27 +200,159 @@
 
             </LinearLayout>
 
+            <!-- Target Apps Selection -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Target Apps:"
+                    android:textSize="16sp"
+                    android:layout_marginBottom="8dp" />
+
+                <Spinner
+                    android:id="@+id/spTargetApps"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- LSPatch Mode Info -->
+        <LinearLayout
+            android:id="@+id/llLSPatchSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="24dp"
+            android:padding="16dp"
+            android:background="@android:color/white"
+            android:elevation="4dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LSPatch Mode"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="16dp" />
+
+            <TextView
+                android:id="@+id/tvLSPatchInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="LSPatch information will appear here"
+                android:textSize="14sp"
+                android:padding="12dp"
+                android:background="@android:color/holo_blue_light"
+                android:layout_marginBottom="16dp" />
+
+            <Button
+                android:id="@+id/btnCheckPermissions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Check Permissions"
+                android:layout_marginBottom="8dp" />
+
+            <Button
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Open LSPatch Manager"
+                android:onClick="onOpenLSPatchManagerClicked"
+                android:layout_marginBottom="8dp" />
+
+        </LinearLayout>
+
+        <!-- Action Buttons -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/btnTest"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Test Module"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnLogs"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="View Logs" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp">
+
+            <Button
+                android:id="@+id/btnSetup"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Setup Guide"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/btnShareModule"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Share Module" />
+
         </LinearLayout>
 
         <Button
-            android:id="@+id/btnTest"
+            android:id="@+id/btnLSPatchGuide"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Test Module"
-            android:layout_marginBottom="12dp" />
+            android:text="LSPatch Guide"
+            android:layout_marginBottom="16dp" />
 
-        <Button
-            android:id="@+id/btnLogs"
+        <!-- Service Controls -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="View Logs" />
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
 
+            <Button
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Start Service"
+                android:onClick="onStartServiceClicked"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Stop Service"
+                android:onClick="onStopServiceClicked" />
+
+        </LinearLayout>
+
+        <!-- Footer -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Version 2.0.0"
+            android:text="Version 2.0.0 | Universal Secure Bypass"
             android:textSize="12sp"
-            android:layout_marginTop="24dp"
             android:textColor="@android:color/darker_gray" />
 
     </LinearLayout>
