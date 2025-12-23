@@ -1,348 +1,46 @@
-name: Build Universal Secure Bypass APK
+name: Build APK
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:  # Manual trigger
-  schedule:
-    # Run every Sunday at 12:00 UTC (optional, for regular builds)
-    - cron: '0 12 * * 0'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
-    strategy:
-      matrix:
-        build-type: [debug, release]
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
     
     - name: Set up JDK 17
-      uses: actions/setup-java@v3
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
     
-    - name: Setup Android SDK
+    - name: Setup Android
       uses: android-actions/setup-android@v3
-      with:
-        api-level: 34
-        build-tools-version: '34.0.0'
-        ndk-version: '25.2.9519653'
     
     - name: Make gradlew executable
       run: chmod +x gradlew
     
-    - name: Cache Gradle dependencies
-      uses: actions/cache@v3
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+    
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
       with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
+        name: app-debug
+        path: app/build/outputs/apk/debug/*.apk
     
-    - name: Validate Gradle Wrapper
-      run: ./gradlew wrapper --dry-run
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
     
-    - name: Build ${{ matrix.build-type }} APK
-      run: ./gradlew assemble${{ matrix.build-type }}
-      env:
-        ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.SIGNING_KEY_ID }}
-        ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
-        ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
-    
-    - name: Upload ${{ matrix.build-type }} APK
-      uses: actions/upload-artifact@v3
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
       with:
-        name: universal-secure-bypass-${{ matrix.build-type }}
-        path: app/build/outputs/apk/${{ matrix.build-type }}/*.apk
-    
-    - name: Generate build info
-      run: |
-        echo "Build Date: $(date)" >> build-info.txt
-        echo "Commit: ${{ github.sha }}" >> build-info.txt
-        echo "Branch: ${{ github.ref }}" >> build-info.txt
-        echo "Build Type: ${{ matrix.build-type }}" >> build-info.txt
-        echo "Version: 2.0.0" >> build-info.txt
-        echo "Module: Universal Secure Bypass" >> build-info.txt
-        echo "Mode: Both Rooted (LSPosed) & Unrooted (LSPatch)" >> build-info.txt
-    
-    - name: Upload build info
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-info-${{ matrix.build-type }}
-        path: build-info.txt
-
-  release:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
-    
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v3
-    
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.ref_name }}
-        name: Universal Secure Bypass v${{ github.ref_name }}
-        body: |
-          # Universal Secure Bypass v${{ github.ref_name }}
-          
-          ## Features
-          - ✅ Bypass FLAG_SECURE for screenshots
-          - ✅ Bypass basic DRM protections
-          - ✅ Works on both rooted (LSPosed) and unrooted (LSPatch) devices
-          - ✅ Automatic mode detection
-          - ✅ Black screen prevention
-          - ✅ Configuration UI
-          - ✅ Log viewer
-          
-          ## Installation
-          ### Rooted Devices:
-          1. Install APK
-          2. Enable in LSPosed Manager
-          3. Select target apps
-          4. Reboot
-          
-          ### Unrooted Devices:
-          1. Install LSPatch Manager
-          2. Patch target apps with this module
-          3. Install patched APKs
-          
-          ## Supported Apps
-          - Netflix, Amazon Prime, YouTube, Disney+, Hulu, HBO Max, Spotify
-          - Most streaming and banking apps
-          
-          ## Changelog
-          See commit history for changes.
-        draft: false
-        prerelease: false
-        files: |
-          universal-secure-bypass-release/*.apk
-          universal-secure-bypass-debug/*.apk
-          build-info-release/build-info.txt
-          build-info-debug/build-info.txt
-
-  deploy-to-repo:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v3
-    
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan github.com >> ~/.ssh/known_hosts
-    
-    - name: Clone releases repo
-      run: |
-        git clone git@github.com:${{ secrets.RELEASE_REPO }}.git releases-repo
-        cd releases-repo
-        git config user.email "actions@github.com"
-        git config user.name "GitHub Actions"
-    
-    - name: Copy APKs to releases repo
-      run: |
-        mkdir -p releases-repo/releases/latest
-        cp -r universal-secure-bypass-release/*.apk releases-repo/releases/latest/
-        cp -r universal-secure-bypass-debug/*.apk releases-repo/releases/latest/
-        cp build-info-release/build-info.txt releases-repo/releases/latest/
-        
-        # Create versioned directory
-        VERSION="2.0.0-$(date +%Y%m%d-%H%M%S)"
-        mkdir -p "releases-repo/releases/$VERSION"
-        cp -r universal-secure-bypass-release/*.apk "releases-repo/releases/$VERSION/"
-        cp -r universal-secure-bypass-debug/*.apk "releases-repo/releases/$VERSION/"
-        cp build-info-release/build-info.txt "releases-repo/releases/$VERSION/"
-        
-        # Update latest version file
-        echo "$VERSION" > releases-repo/releases/latest/version.txt
-        
-        # Create README for releases
-        cat > releases-repo/README.md << 'EOF'
-        # Universal Secure Bypass Releases
-        
-        ## Latest Version
-        - **Version:** $(cat releases-repo/releases/latest/version.txt)
-        - **Build Date:** $(date)
-        
-        ## Download
-        - [Debug APK](releases/latest/app-debug.apk)
-        - [Release APK](releases/latest/app-release.apk)
-        
-        ## Installation
-        See main repository for instructions.
-        
-        ## Previous Versions
-        Check the releases/ directory for older versions.
-        EOF
-    
-    - name: Commit and push to releases repo
-      run: |
-        cd releases-repo
-        git add .
-        git commit -m "Add release v2.0.0-${{ github.sha }} - $(date)"
-        git push origin main
-
-  quality-check:
-    runs-on: ubuntu-latest
-    needs: build
-    
-    steps:
-    - name: Download APK
-      uses: actions/download-artifact@v3
-      with:
-        name: universal-secure-bypass-release
-    
-    - name: Install APK analysis tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y apktool dex2jar jadx
-    
-    - name: Analyze APK size
-      run: |
-        echo "APK Size Analysis:"
-        ls -lh *.apk
-        for apk in *.apk; do
-          echo "$apk: $(stat -c%s "$apk") bytes"
-        done
-    
-    - name: Check for common issues
-      run: |
-        echo "Checking APK structure..."
-        for apk in *.apk; do
-          echo "=== Analyzing $apk ==="
-          
-          # Check if APK contains Xposed metadata
-          if unzip -l "$apk" | grep -q "xposed_init.xml"; then
-            echo "✅ Xposed metadata found"
-          else
-            echo "❌ Xposed metadata missing"
-          fi
-          
-          # Check AndroidManifest
-          if unzip -l "$apk" | grep -q "AndroidManifest.xml"; then
-            echo "✅ AndroidManifest.xml found"
-          else
-            echo "❌ AndroidManifest.xml missing"
-          fi
-          
-          # Check if APK is properly signed
-          if apksigner verify "$apk" 2>/dev/null; then
-            echo "✅ APK is properly signed"
-          else
-            echo "⚠️ APK signature check failed"
-          fi
-          
-          echo "APK contains:"
-          unzip -l "$apk" | grep -E "\.(so|dex|xml|arsc|png|jpg)$" | wc -l | xargs echo "  Files:"
-          
-          echo ""
-        done
-    
-    - name: Generate security report
-      run: |
-        cat > security-report.md << 'EOF'
-        # Security Report - Universal Secure Bypass
-        
-        ## Build Information
-        - Date: $(date)
-        - Commit: ${{ github.sha }}
-        - Branch: ${{ github.ref }}
-        
-        ## APK Analysis
-        - Minimum SDK: 21
-        - Target SDK: 34
-        
-        ## Permissions Required
-        The module requests the following permissions:
-        - WRITE_EXTERNAL_STORAGE
-        - READ_EXTERNAL_STORAGE
-        - SYSTEM_ALERT_WINDOW
-        - FOREGROUND_SERVICE
-        - CAPTURE_VIDEO_OUTPUT
-        
-        ## Security Considerations
-        1. This module modifies system behavior
-        2. Use only on devices you own
-        3. Some apps may detect and block the module
-        4. DRM bypass may violate terms of service
-        
-        ## Recommended Usage
-        - For educational purposes only
-        - On personal devices
-        - With apps you have legal rights to access
-        
-        ## Legal Disclaimer
-        This software is provided "as is". The authors are not responsible
-        for any misuse or legal issues arising from its use.
-        EOF
-        
-        echo "Security report generated"
-    
-    - name: Upload security report
-      uses: actions/upload-artifact@v3
-      with:
-        name: security-report
-        path: security-report.md
-
-  notify:
-    runs-on: ubuntu-latest
-    needs: [build, quality-check]
-    if: always()
-    
-    steps:
-    - name: Send Discord notification
-      uses: sarisia/actions-status-discord@v1
-      if: always()
-      with:
-        webhook: ${{ secrets.DISCORD_WEBHOOK }}
-        title: "Universal Secure Bypass Build"
-        description: |
-          **Status:** ${{ job.status }}
-          **Branch:** ${{ github.ref }}
-          **Commit:** ${{ github.sha }}
-          **Build Type:** Debug & Release
-          
-          [View Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-        username: GitHub Actions
-        avatar_url: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
-        color: ${{ job.status == 'success' && '00ff00' || 'ff0000' }}
-    
-    - name: Send Telegram notification
-      uses: appleboy/telegram-action@master
-      if: always()
-      with:
-        to: ${{ secrets.TELEGRAM_TO }}
-        token: ${{ secrets.TELEGRAM_TOKEN }}
-        message: |
-          🚀 Universal Secure Bypass Build Complete!
-          
-          📱 Status: ${{ job.status }}
-          🌿 Branch: ${{ github.ref }}
-          🔗 Commit: ${{ github.sha | slice: 0, 7 }}
-          📦 Builds: Debug & Release APKs
-          
-          ✅ Workflow: ${{ github.workflow }}
-          🆔 Run ID: ${{ github.run_id }}
-          
-          🔗 [View on GitHub](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        name: app-release
+        path: app/build/outputs/apk/release/*.apk
