@@ -1,5 +1,5 @@
 package com.flag.secure
-
+import android.content.Intent // <-- Add this import
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.widget.Button
