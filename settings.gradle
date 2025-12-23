@@ -10,6 +10,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        
+        // Add custom repositories here (not in app/build.gradle)
+        maven { url 'https://jitpack.io' }
+        maven { url 'https://raw.githubusercontent.com/solohsu/XposedInstaller/master/XposedBridge/api/' }
     }
 }
 
