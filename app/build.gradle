@@ -36,22 +36,11 @@ android {
     }
 }
 
-repositories {
-    maven { url 'https://jitpack.io' }
-    maven { url 'https://api.xposed.info/' }
-}
-
 dependencies {
-    // Xposed API from JitPack
-    compileOnly 'com.github.rovo89:XposedAPI:82'
+    // Xposed API - will be downloaded by GitHub Actions
+    compileOnly files('libs/xposed-api-82.jar')
     
-    // OR try this alternative
-    compileOnly 'com.github.tiann:epic:0.11.2'
-    
-    // OR use the official Xposed API (if available)
-    compileOnly 'de.robv.android.xposed:api:82:sources'
-    
-    // AndroidX dependencies
+    // AndroidX
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
