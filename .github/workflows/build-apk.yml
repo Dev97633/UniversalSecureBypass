@@ -21,25 +21,34 @@ jobs:
     
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      with:
-        api-level: 34
-        build-tools-version: '34.0.0'
     
     - name: Make gradlew executable
       run: chmod +x gradlew
     
-    - name: Build APK
-      run: |
-        ./gradlew assembleDebug
-        ./gradlew assembleRelease
+    - name: Cache Gradle dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          gradle-
     
-    - name: List generated APKs
-      run: find . -name "*.apk" -type f | xargs ls -lh
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
     
-    - name: Upload APKs
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
+    
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: apk-files
-        path: |
-          app/build/outputs/apk/debug/*.apk
-          app/build/outputs/apk/release/*.apk
+        name: app-debug
+        path: app/build/outputs/apk/debug/*.apk
+    
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release
+        path: app/build/outputs/apk/release/*.apk
