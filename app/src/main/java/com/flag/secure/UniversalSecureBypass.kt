@@ -12,6 +12,7 @@ import android.view.WindowManager.LayoutParams
 import android.widget.Toast
 import de.robv.android.xposed.*
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import de.robv.android.xposed.callbacks.XC_InitPackageResources 
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
