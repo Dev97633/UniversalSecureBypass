@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Universal Secure Bypass APK
 
 on:
   push:
@@ -24,22 +24,38 @@ jobs:
       with:
         api-level: 34
         build-tools-version: '34.0.0'
+        ndk-version: '25.2.9519653'
     
     - name: Make gradlew executable
       run: chmod +x gradlew
     
-    - name: Build APK
-      run: |
-        ./gradlew assembleDebug
-        ./gradlew assembleRelease
+    - name: Cache Gradle dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
     
-    - name: List generated APKs
-      run: find . -name "*.apk" -type f | xargs ls -lh
+    - name: Validate Gradle setup
+      run: ./gradlew --version
     
-    - name: Upload APKs
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+    
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
+    
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: apk-files
-        path: |
-          app/build/outputs/apk/debug/*.apk
-          app/build/outputs/apk/release/*.apk
+        name: universal-secure-bypass-debug
+        path: app/build/outputs/apk/debug/*.apk
+    
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: universal-secure-bypass-release
+        path: app/build/outputs/apk/release/*.apk
