@@ -1,0 +1,24 @@
+{
+  "name": "Universal Secure Bypass",
+  "version": "2.0.0",
+  "description": "Bypass FLAG_SECURE and DRM for screenshots and recording",
+  "author": "Universal Secure Bypass Team",
+  "minApi": 21,
+  "targetApi": 34,
+  "scope": [
+    "com.netflix.mediaclient",
+    "com.amazon.avod.thirdpartyclient",
+    "com.google.android.youtube",
+    "com.hulu.plus",
+    "com.disney.disneyplus",
+    "com.hbo.hbonow",
+    "com.spotify.music"
+  ],
+  "hooks": {
+    "android/view/Window": ["setFlags"],
+    "android/view/SurfaceView": ["setSecure"],
+    "android/app/Activity": ["onCreate"],
+    "android/media/MediaDrm": ["getPropertyString", "openSession"],
+    "android/media/MediaPlayer": ["prepareDrm"]
+  }
+}
