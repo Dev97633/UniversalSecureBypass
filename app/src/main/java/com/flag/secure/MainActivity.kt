@@ -5,11 +5,18 @@ import android.content.*
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
+import android.util.Log
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.FileProvider
-import java.io.File
+import java.io.*
+import java.lang.Thread.getDefaultUncaughtExceptionHandler
+import java.lang.Thread.setDefaultUncaughtExceptionHandler
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
@@ -21,10 +28,17 @@ class MainActivity : AppCompatActivity() {
         const val KEY_SHOW_NOTIFICATIONS = "show_notifications"
         const val KEY_SYSTEM_APPS = "system_apps"
         const val KEY_TARGET_APPS = "target_apps"
+        
+        // Crash logging constants
+        const val CRASH_LOG_DIR = "crash_logs"
+        const val CRASH_LOG_PREFIX = "crash_"
+        const val MAX_CRASH_LOGS = 10
+        const val TAG = "SecureBypass"
     }
 
     private lateinit var prefs: SharedPreferences
     private lateinit var lspatchHelper: LSPatchHelper
+    private lateinit var crashLogger: CrashLogger
 
     private lateinit var tvStatus: TextView
     private lateinit var tvMode: TextView
@@ -43,222 +57,590 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        
+        // Initialize crash logging before anything else
+        crashLogger = CrashLogger.getInstance(applicationContext)
+        crashLogger.installExceptionHandler()
+        
+        // Log app start
+        crashLogger.logEvent("AppStarted", "MainActivity.onCreate()")
+        
+        try {
+            setContentView(R.layout.activity_main)
 
-        UniversalSecureBypass.init(applicationContext)
-        lspatchHelper = LSPatchHelper(this)
-        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            UniversalSecureBypass.init(applicationContext)
+            lspatchHelper = LSPatchHelper(this)
+            prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
 
-        bindViews()
-        setupSpinner()
-        loadSettings()
-        setupListeners()
-        refreshState()
+            bindViews()
+            setupSpinner()
+            loadSettings()
+            setupListeners()
+            refreshState()
+            
+        } catch (e: Exception) {
+            crashLogger.logException(e, "MainActivity.onCreate")
+            showCrashRecoveryDialog(e)
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        crashLogger.logEvent("AppResumed", "MainActivity.onResume()")
         refreshState()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        crashLogger.logEvent("AppPaused", "MainActivity.onPause()")
+    }
+
+    override fun onDestroy() {
+        crashLogger.logEvent("AppDestroyed", "MainActivity.onDestroy()")
+        super.onDestroy()
+    }
+
+    // ---------------- CRASH LOGGING SYSTEM ----------------
+
+    private fun showCrashRecoveryDialog(exception: Exception) {
+        AlertDialog.Builder(this)
+            .setTitle("Application Error")
+            .setMessage("An error occurred. Would you like to send a crash report?")
+            .setPositiveButton("Send Report") { _, _ ->
+                crashLogger.exportCrashLogs()
+                showCrashReportOptions()
+            }
+            .setNegativeButton("Restart App") { _, _ ->
+                restartApp()
+            }
+            .setNeutralButton("Continue Anyway") { _, _ ->
+                // Just continue with potentially broken state
+                Toast.makeText(this, "App may be unstable", Toast.LENGTH_LONG).show()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun showCrashReportOptions() {
+        val logsDir = File(filesDir, CRASH_LOG_DIR)
+        val latestCrash = crashLogger.getLatestCrashLog()
+        
+        AlertDialog.Builder(this)
+            .setTitle("Crash Report")
+            .setMessage("Crash report generated. What would you like to do?")
+            .setPositiveButton("View Report") { _, _ ->
+                showCrashLogContent(latestCrash)
+            }
+            .setNegativeButton("Share Report") { _, _ ->
+                shareCrashLog(latestCrash)
+            }
+            .setNeutralButton("Delete All Reports") { _, _ ->
+                deleteAllCrashLogs()
+            }
+            .show()
+    }
+
+    private fun showCrashLogContent(crashFile: File?) {
+        if (crashFile == null || !crashFile.exists()) {
+            Toast.makeText(this, "No crash log found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val content = crashFile.readText()
+        AlertDialog.Builder(this)
+            .setTitle("Crash Report")
+            .setMessage(content.take(2000) + if (content.length > 2000) "\n\n... (truncated)" else "")
+            .setPositiveButton("OK", null)
+            .setNegativeButton("Share") { _, _ -> shareCrashLog(crashFile) }
+            .show()
+    }
+
+    private fun shareCrashLog(crashFile: File?) {
+        if (crashFile == null || !crashFile.exists()) {
+            Toast.makeText(this, "No crash log to share", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val uri = FileProvider.getUriForFile(
+            this,
+            "${packageName}.provider",
+            crashFile
+        )
+        
+        val shareIntent = Intent().apply {
+            action = Intent.ACTION_SEND
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "SecureBypass Crash Report")
+            putExtra(Intent.EXTRA_TEXT, "Crash report attached")
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        
+        startActivity(Intent.createChooser(shareIntent, "Share Crash Report"))
+    }
+
+    private fun deleteAllCrashLogs() {
+        AlertDialog.Builder(this)
+            .setTitle("Delete All Crash Reports")
+            .setMessage("Are you sure you want to delete all crash reports?")
+            .setPositiveButton("Delete") { _, _ ->
+                crashLogger.cleanupOldLogs(0) // Delete all logs
+                Toast.makeText(this, "All crash reports deleted", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun restartApp() {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+        finish()
+        Process.killProcess(Process.myPid())
     }
 
     // ---------------- INIT ----------------
 
     private fun bindViews() {
-        tvStatus = findViewById(R.id.tvStatus)
-        tvMode = findViewById(R.id.tvMode)
-        tvInstructions = findViewById(R.id.tvInstructions)
-        switchFlagSecure = findViewById(R.id.switchFlagSecure)
-        switchDrm = findViewById(R.id.switchDrm)
-        switchBlackScreen = findViewById(R.id.switchBlackScreen)
-        switchNotifications = findViewById(R.id.switchNotifications)
-        switchSystemApps = findViewById(R.id.switchSystemApps)
-        spTargetApps = findViewById(R.id.spTargetApps)
-        llRootSettings = findViewById(R.id.llRootSettings)
-        llLSPatchSettings = findViewById(R.id.llLSPatchSettings)
-        tvLSPatchInfo = findViewById(R.id.tvLSPatchInfo)
+        try {
+            tvStatus = findViewById(R.id.tvStatus)
+            tvMode = findViewById(R.id.tvMode)
+            tvInstructions = findViewById(R.id.tvInstructions)
+            switchFlagSecure = findViewById(R.id.switchFlagSecure)
+            switchDrm = findViewById(R.id.switchDrm)
+            switchBlackScreen = findViewById(R.id.switchBlackScreen)
+            switchNotifications = findViewById(R.id.switchNotifications)
+            switchSystemApps = findViewById(R.id.switchSystemApps)
+            spTargetApps = findViewById(R.id.spTargetApps)
+            llRootSettings = findViewById(R.id.llRootSettings)
+            llLSPatchSettings = findViewById(R.id.llLSPatchSettings)
+            tvLSPatchInfo = findViewById(R.id.tvLSPatchInfo)
+            
+            // Add crash log viewer button if in debug mode
+            if (BuildConfig.DEBUG) {
+                val crashLogButton = Button(this).apply {
+                    text = "View Crash Logs"
+                    setOnClickListener {
+                        showCrashReportOptions()
+                    }
+                }
+                findViewById<LinearLayout>(R.id.mainLayout)?.addView(crashLogButton)
+            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "bindViews")
+            throw e
+        }
     }
 
     private fun setupSpinner() {
-        val apps = arrayOf(
-            "All Streaming Apps",
-            "Netflix Only",
-            "YouTube Only",
-            "Amazon Prime Only",
-            "Disney+ Only",
-            "Custom Selection"
-        )
+        try {
+            val apps = arrayOf(
+                "All Streaming Apps",
+                "Netflix Only",
+                "YouTube Only",
+                "Amazon Prime Only",
+                "Disney+ Only",
+                "Custom Selection"
+            )
 
-        val adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_item,
-            apps
-        ).apply {
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
+            val adapter = ArrayAdapter(
+                this,
+                android.R.layout.simple_spinner_item,
+                apps
+            ).apply {
+                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            }
 
-        spTargetApps.adapter = adapter
+            spTargetApps.adapter = adapter
 
-        spTargetApps.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?,
-                    view: android.view.View?,
-                    position: Int,
-                    id: Long
-                ) {
-                    if (!spinnerInitialized) {
-                        spinnerInitialized = true
-                        return
+            spTargetApps.onItemSelectedListener =
+                object : AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(
+                        parent: AdapterView<*>?,
+                        view: android.view.View?,
+                        position: Int,
+                        id: Long
+                    ) {
+                        try {
+                            if (!spinnerInitialized) {
+                                spinnerInitialized = true
+                                return
+                            }
+
+                            val value = parent?.getItemAtPosition(position) as String
+                            prefs.edit().putString(KEY_TARGET_APPS, value).apply()
+                            crashLogger.logEvent("TargetAppChanged", value)
+                            toast("Target apps: $value")
+                        } catch (e: Exception) {
+                            crashLogger.logException(e, "onItemSelected")
+                        }
                     }
 
-                    val value = parent?.getItemAtPosition(position) as String
-                    prefs.edit().putString(KEY_TARGET_APPS, value).apply()
-                    toast("Target apps: $value")
+                    override fun onNothingSelected(parent: AdapterView<*>?) {}
                 }
-
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
-            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "setupSpinner")
+            throw e
+        }
     }
 
     // ---------------- STATE ----------------
 
     private fun refreshState() {
-        val rooted = UniversalSecureBypass.isRootedMode
+        try {
+            val rooted = UniversalSecureBypass.isRootedMode
 
-        tvMode.text = if (rooted)
-            "Mode: ROOT (LSPosed/Xposed)"
-        else
-            "Mode: UNROOTED (LSPatch)"
+            tvMode.text = if (rooted)
+                "Mode: ROOT (LSPosed/Xposed)"
+            else
+                "Mode: UNROOTED (LSPatch)"
 
-        updateModuleStatus()
-        updateUIForMode(rooted)
-        updateLSPatchInfo()
+            updateModuleStatus()
+            updateUIForMode(rooted)
+            updateLSPatchInfo()
+            
+            crashLogger.logEvent("AppStateRefreshed", "rooted=$rooted")
+        } catch (e: Exception) {
+            crashLogger.logException(e, "refreshState")
+        }
     }
 
     private fun updateModuleStatus() {
-        val active = isModuleActive()
+        try {
+            val active = isModuleActive()
 
-        if (active) {
-            tvStatus.text = "✅ Module ACTIVE"
-            tvStatus.setTextColor(getColor(android.R.color.holo_green_dark))
-        } else {
-            tvStatus.text = "❌ Module NOT ACTIVE"
-            tvStatus.setTextColor(getColor(android.R.color.holo_red_dark))
+            if (active) {
+                tvStatus.text = "✅ Module ACTIVE"
+                tvStatus.setTextColor(getColor(android.R.color.holo_green_dark))
+            } else {
+                tvStatus.text = "❌ Module NOT ACTIVE"
+                tvStatus.setTextColor(getColor(android.R.color.holo_red_dark))
+            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "updateModuleStatus")
         }
     }
 
     private fun updateUIForMode(rooted: Boolean) {
-        if (rooted) {
-            llRootSettings.visibility = LinearLayout.VISIBLE
-            llLSPatchSettings.visibility = LinearLayout.GONE
-            switchSystemApps.isEnabled = true
-            tvInstructions.text =
-                "Rooted mode: enable module in LSPosed and select target apps."
-        } else {
-            llRootSettings.visibility = LinearLayout.GONE
-            llLSPatchSettings.visibility = LinearLayout.VISIBLE
-            switchSystemApps.isChecked = false
-            switchSystemApps.isEnabled = false
-            tvInstructions.text =
-                if (lspatchHelper.isLSPatchInstalled())
-                    "Use LSPatch to embed this module into target apps."
-                else
-                    "Install LSPatch Manager to continue."
+        try {
+            if (rooted) {
+                llRootSettings.visibility = LinearLayout.VISIBLE
+                llLSPatchSettings.visibility = LinearLayout.GONE
+                switchSystemApps.isEnabled = true
+                tvInstructions.text =
+                    "Rooted mode: enable module in LSPosed and select target apps."
+            } else {
+                llRootSettings.visibility = LinearLayout.GONE
+                llLSPatchSettings.visibility = LinearLayout.VISIBLE
+                switchSystemApps.isChecked = false
+                switchSystemApps.isEnabled = false
+                tvInstructions.text =
+                    if (lspatchHelper.isLSPatchInstalled())
+                        "Use LSPatch to embed this module into target apps."
+                    else
+                        "Install LSPatch Manager to continue."
+            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "updateUIForMode")
         }
     }
 
     private fun updateLSPatchInfo() {
-        val sb = StringBuilder()
-        val installed = lspatchHelper.isLSPatchInstalled()
+        try {
+            val sb = StringBuilder()
+            val installed = lspatchHelper.isLSPatchInstalled()
 
-        sb.append("LSPatch: ")
-            .append(if (installed) "Installed ✅" else "Not Installed ❌")
-            .append("\n\n")
+            sb.append("LSPatch: ")
+                .append(if (installed) "Installed ✅" else "Not Installed ❌")
+                .append("\n\n")
 
-        if (installed) {
-            sb.append(
-                """
-                Steps:
-                1. Open LSPatch Manager
-                2. Patch target app
-                3. Select this module APK
-                4. Install patched APK
-                """.trimIndent()
-            )
+            if (installed) {
+                sb.append(
+                    """
+                    Steps:
+                    1. Open LSPatch Manager
+                    2. Patch target app
+                    3. Select this module APK
+                    4. Install patched APK
+                    """.trimIndent()
+                )
+            }
+
+            tvLSPatchInfo.text = sb.toString()
+        } catch (e: Exception) {
+            crashLogger.logException(e, "updateLSPatchInfo")
         }
-
-        tvLSPatchInfo.text = sb.toString()
     }
 
     // ---------------- LISTENERS ----------------
 
     private fun setupListeners() {
-        switchFlagSecure.save(KEY_BYPASS_FLAG_SECURE)
-        switchDrm.save(KEY_BYPASS_DRM)
-        switchBlackScreen.save(KEY_BYPASS_BLACK_SCREEN)
-        switchNotifications.save(KEY_SHOW_NOTIFICATIONS)
+        try {
+            switchFlagSecure.save(KEY_BYPASS_FLAG_SECURE)
+            switchDrm.save(KEY_BYPASS_DRM)
+            switchBlackScreen.save(KEY_BYPASS_BLACK_SCREEN)
+            switchNotifications.save(KEY_SHOW_NOTIFICATIONS)
 
-        switchSystemApps.setOnCheckedChangeListener { _, checked ->
-            if (UniversalSecureBypass.isRootedMode) {
-                prefs.edit().putBoolean(KEY_SYSTEM_APPS, checked).apply()
+            switchSystemApps.setOnCheckedChangeListener { _, checked ->
+                try {
+                    if (UniversalSecureBypass.isRootedMode) {
+                        prefs.edit().putBoolean(KEY_SYSTEM_APPS, checked).apply()
+                        crashLogger.logEvent("SystemAppsChanged", "enabled=$checked")
+                    }
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "switchSystemApps.onCheckedChange")
+                }
             }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "setupListeners")
         }
     }
 
     private fun SwitchCompat.save(key: String) {
         setOnCheckedChangeListener { _, checked ->
-            prefs.edit().putBoolean(key, checked).apply()
+            try {
+                prefs.edit().putBoolean(key, checked).apply()
+                crashLogger.logEvent("SettingChanged", "$key=$checked")
+            } catch (e: Exception) {
+                crashLogger.logException(e, "SwitchCompat.save.$key")
+            }
         }
     }
 
     // ---------------- SERVICE ----------------
 
     fun onStartServiceClicked(v: android.view.View) {
-        val intent = Intent(this, SecureBypassService::class.java)
-            .setAction(SecureBypassService.ACTION_START)
+        try {
+            val intent = Intent(this, SecureBypassService::class.java)
+                .setAction(SecureBypassService.ACTION_START)
 
-        if (Build.VERSION.SDK_INT >= 26)
-            startForegroundService(intent)
-        else
-            startService(intent)
+            if (Build.VERSION.SDK_INT >= 26)
+                startForegroundService(intent)
+            else
+                startService(intent)
 
-        toast("Service started")
+            crashLogger.logEvent("ServiceStarted", "SecureBypassService")
+            toast("Service started")
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onStartServiceClicked")
+            toast("Failed to start service: ${e.message}")
+        }
     }
 
     fun onStopServiceClicked(v: android.view.View) {
-        startService(
-            Intent(this, SecureBypassService::class.java)
-                .setAction(SecureBypassService.ACTION_STOP)
-        )
-        toast("Service stopped")
+        try {
+            startService(
+                Intent(this, SecureBypassService::class.java)
+                    .setAction(SecureBypassService.ACTION_STOP)
+            )
+            crashLogger.logEvent("ServiceStopped", "SecureBypassService")
+            toast("Service stopped")
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onStopServiceClicked")
+            toast("Failed to stop service: ${e.message}")
+        }
     }
 
     // ---------------- HELPERS ----------------
 
     private fun loadSettings() {
-        switchFlagSecure.isChecked =
-            prefs.getBoolean(KEY_BYPASS_FLAG_SECURE, true)
-        switchDrm.isChecked =
-            prefs.getBoolean(KEY_BYPASS_DRM, true)
-        switchBlackScreen.isChecked =
-            prefs.getBoolean(KEY_BYPASS_BLACK_SCREEN, true)
-        switchNotifications.isChecked =
-            prefs.getBoolean(KEY_SHOW_NOTIFICATIONS, false)
+        try {
+            switchFlagSecure.isChecked =
+                prefs.getBoolean(KEY_BYPASS_FLAG_SECURE, true)
+            switchDrm.isChecked =
+                prefs.getBoolean(KEY_BYPASS_DRM, true)
+            switchBlackScreen.isChecked =
+                prefs.getBoolean(KEY_BYPASS_BLACK_SCREEN, true)
+            switchNotifications.isChecked =
+                prefs.getBoolean(KEY_SHOW_NOTIFICATIONS, false)
 
-        switchSystemApps.isChecked =
-            UniversalSecureBypass.isRootedMode &&
-                    prefs.getBoolean(KEY_SYSTEM_APPS, true)
+            switchSystemApps.isChecked =
+                UniversalSecureBypass.isRootedMode &&
+                        prefs.getBoolean(KEY_SYSTEM_APPS, true)
+                        
+            crashLogger.logEvent("SettingsLoaded", "fromSharedPreferences")
+        } catch (e: Exception) {
+            crashLogger.logException(e, "loadSettings")
+        }
     }
 
     private fun isModuleActive(): Boolean {
         return try {
             Class.forName("com.flag.secure.UniversalSecureBypass")
             true
-        } catch (_: Throwable) {
+        } catch (e: Throwable) {
+            crashLogger.logException(e as Exception, "isModuleActive")
             false
         }
     }
 
-    private fun toast(msg: String) =
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    private fun toast(msg: String) {
+        try {
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            crashLogger.logEvent("ToastShown", msg)
+        } catch (e: Exception) {
+            crashLogger.logException(e, "toast")
+        }
+    }
+}
+
+// ---------------- CRASH LOGGER CLASS ----------------
+
+class CrashLogger private constructor(private val context: Context) {
+    
+    companion object {
+        @Volatile
+        private var INSTANCE: CrashLogger? = null
+        
+        fun getInstance(context: Context): CrashLogger =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: CrashLogger(context.applicationContext).also { INSTANCE = it }
+            }
+    }
+    
+    private val executor = Executors.newSingleThreadExecutor()
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
+    private val logFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
+    
+    fun installExceptionHandler() {
+        val defaultHandler = getDefaultUncaughtExceptionHandler()
+        
+        setDefaultUncaughtExceptionHandler { thread, throwable ->
+            // Log the crash
+            logException(throwable as Exception, "UncaughtException", thread.name)
+            
+            // Show crash notification
+            showCrashNotification(throwable)
+            
+            // Call original handler
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+    
+    fun logException(exception: Exception, source: String, threadName: String = Thread.currentThread().name) {
+        executor.execute {
+            try {
+                val crashFile = createCrashLogFile()
+                val writer = FileWriter(crashFile, true)
+                
+                writer.use {
+                    it.write("=".repeat(80) + "\n")
+                    it.write("CRASH REPORT\n")
+                    it.write("Time: ${logFormat.format(Date())}\n")
+                    it.write("Source: $source\n")
+                    it.write("Thread: $threadName\n")
+                    it.write("App Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n")
+                    it.write("Android API: ${Build.VERSION.SDK_INT}\n")
+                    it.write("Device: ${Build.MANUFACTURER} ${Build.MODEL}\n")
+                    it.write("Rooted: ${UniversalSecureBypass.isRootedMode}\n")
+                    it.write("-".repeat(80) + "\n")
+                    it.write("Exception: ${exception.javaClass.name}\n")
+                    it.write("Message: ${exception.message}\n")
+                    it.write("Stack Trace:\n")
+                    exception.printStackTrace(PrintWriter(it))
+                    it.write("\n" + "=".repeat(80) + "\n\n")
+                }
+                
+                Log.e(MainActivity.TAG, "Crash logged: $source", exception)
+                
+                // Clean up old logs
+                cleanupOldLogs(MainActivity.MAX_CRASH_LOGS)
+                
+            } catch (e: Exception) {
+                Log.e(MainActivity.TAG, "Failed to write crash log", e)
+            }
+        }
+    }
+    
+    fun logEvent(event: String, details: String) {
+        executor.execute {
+            try {
+                val logFile = getEventLogFile()
+                val writer = FileWriter(logFile, true)
+                
+                writer.use {
+                    it.write("[${logFormat.format(Date())}] $event: $details\n")
+                }
+                
+                Log.d(MainActivity.TAG, "$event: $details")
+                
+            } catch (e: Exception) {
+                Log.e(MainActivity.TAG, "Failed to write event log", e)
+            }
+        }
+    }
+    
+    private fun createCrashLogFile(): File {
+        val logsDir = File(context.filesDir, MainActivity.CRASH_LOG_DIR)
+        if (!logsDir.exists()) {
+            logsDir.mkdirs()
+        }
+        
+        val timestamp = dateFormat.format(Date())
+        return File(logsDir, "${MainActivity.CRASH_LOG_PREFIX}${timestamp}.txt")
+    }
+    
+    private fun getEventLogFile(): File {
+        val logsDir = File(context.filesDir, MainActivity.CRASH_LOG_DIR)
+        if (!logsDir.exists()) {
+            logsDir.mkdirs()
+        }
+        return File(logsDir, "events.log")
+    }
+    
+    fun getLatestCrashLog(): File? {
+        val logsDir = File(context.filesDir, MainActivity.CRASH_LOG_DIR)
+        if (!logsDir.exists()) return null
+        
+        return logsDir.listFiles { file -> 
+            file.name.startsWith(MainActivity.CRASH_LOG_PREFIX) 
+        }?.maxByOrNull { it.lastModified() }
+    }
+    
+    fun cleanupOldLogs(maxLogs: Int) {
+        executor.execute {
+            try {
+                val logsDir = File(context.filesDir, MainActivity.CRASH_LOG_DIR)
+                if (!logsDir.exists()) return@execute
+                
+                val crashLogs = logsDir.listFiles { file -> 
+                    file.name.startsWith(MainActivity.CRASH_LOG_PREFIX) 
+                }?.sortedByDescending { it.lastModified() }
+                
+                crashLogs?.let {
+                    if (it.size > maxLogs) {
+                        it.subList(maxLogs, it.size).forEach { file ->
+                            file.delete()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(MainActivity.TAG, "Failed to cleanup old logs", e)
+            }
+        }
+    }
+    
+    fun exportCrashLogs(): Uri? {
+        return try {
+            val logsDir = File(context.filesDir, MainActivity.CRASH_LOG_DIR)
+            if (!logsDir.exists()) return null
+            
+            val zipFile = File(context.cacheDir, "crash_logs_${dateFormat.format(Date())}.zip")
+            // Here you would implement zip creation logic
+            // For simplicity, we'll just return the directory
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                logsDir
+            )
+        } catch (e: Exception) {
+            Log.e(MainActivity.TAG, "Failed to export crash logs", e)
+            null
+        }
+    }
+    
+    private fun showCrashNotification(exception: Exception) {
+        // You can implement a notification here if needed
+        Log.e(MainActivity.TAG, "Crash occurred: ${exception.message}")
+    }
 }
