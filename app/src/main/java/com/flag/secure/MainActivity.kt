@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: SharedPreferences
     private lateinit var crashLogger: CrashLogger
+    private lateinit var lspatchHelper: LSPatchHelper
 
     // UI Elements
     private lateinit var tvStatus: TextView
@@ -63,6 +64,7 @@ class MainActivity : AppCompatActivity() {
             setContentView(R.layout.activity_main)
             
             prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            lspatchHelper = LSPatchHelper(this)
             
             // SAFE initialization - wrapped in try-catch
             try {
