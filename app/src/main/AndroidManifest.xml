@@ -45,6 +45,27 @@
         <activity
             android:name=".TestActivity"
             android:exported="false" />
+        
+        <service
+            android:name=".SecureBypassService"
+            android:exported="false" />
+        
+        <!-- FileProvider for sharing crash logs -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+        
+        <!-- Optional: CrashHandler Service -->
+        <service
+            android:name=".CrashHandlerService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
     </application>
 
