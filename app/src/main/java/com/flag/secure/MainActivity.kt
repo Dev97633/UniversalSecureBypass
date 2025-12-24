@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.util.Log
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -35,9 +36,7 @@ class MainActivity : AppCompatActivity() {
         const val MAX_CRASH_LOGS = 10
         const val TAG = "SecureBypass"
         
-        // Remove BuildConfig references and use app info directly
-        val APP_VERSION_NAME = "1.0.0"  // Hardcode or get from package manager
-        const val APP_VERSION_CODE = 1
+        // App info (we'll get these from package manager)
         const val IS_DEBUG = true  // Change based on build type
     }
 
@@ -57,7 +56,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var llRootSettings: LinearLayout
     private lateinit var llLSPatchSettings: LinearLayout
     private lateinit var tvLSPatchInfo: TextView
-    private lateinit var mainLayout: LinearLayout  // Added reference
+    private lateinit var btnTest: Button
+    private lateinit var btnLogs: Button
+    private lateinit var btnSetup: Button
+    private lateinit var btnShareModule: Button
+    private lateinit var btnLSPatchGuide: Button
+    private lateinit var btnCheckPermissions: Button
 
     private var spinnerInitialized = false
 
@@ -74,9 +78,6 @@ class MainActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_main)
 
-            // Find main layout
-            mainLayout = findViewById(R.id.mainLayout)
-            
             UniversalSecureBypass.init(applicationContext)
             lspatchHelper = LSPatchHelper(this)
             prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -131,7 +132,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showCrashReportOptions() {
-        val logsDir = File(filesDir, CRASH_LOG_DIR)
         val latestCrash = crashLogger.getLatestCrashLog()
         
         AlertDialog.Builder(this)
@@ -146,6 +146,7 @@ class MainActivity : AppCompatActivity() {
             .setNeutralButton("Delete All Reports") { _, _ ->
                 deleteAllCrashLogs()
             }
+            .setNeutralButton("Cancel", null)
             .show()
     }
 
@@ -233,16 +234,41 @@ class MainActivity : AppCompatActivity() {
             llRootSettings = findViewById(R.id.llRootSettings)
             llLSPatchSettings = findViewById(R.id.llLSPatchSettings)
             tvLSPatchInfo = findViewById(R.id.tvLSPatchInfo)
+            btnTest = findViewById(R.id.btnTest)
+            btnLogs = findViewById(R.id.btnLogs)
+            btnSetup = findViewById(R.id.btnSetup)
+            btnShareModule = findViewById(R.id.btnShareModule)
+            btnLSPatchGuide = findViewById(R.id.btnLSPatchGuide)
+            btnCheckPermissions = findViewById(R.id.btnCheckPermissions)
             
-            // Add crash log viewer button if in debug mode
+            // Find the ScrollView and add debug button if needed
             if (IS_DEBUG) {
-                val crashLogButton = Button(this).apply {
-                    text = "View Crash Logs"
-                    setOnClickListener {
-                        showCrashReportOptions()
+                val scrollView = findViewById<ScrollView?>(android.R.id.content)
+                scrollView?.let {
+                    // Get the LinearLayout inside ScrollView
+                    val linearLayout = it.getChildAt(0) as? LinearLayout
+                    linearLayout?.let { layout ->
+                        val crashLogButton = Button(this).apply {
+                            text = "View Crash Logs"
+                            setOnClickListener {
+                                showCrashReportOptions()
+                            }
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply {
+                                setMargins(0, 16, 0, 16)
+                            }
+                        }
+                        // Add button before the footer
+                        val childCount = layout.childCount
+                        if (childCount > 0) {
+                            layout.addView(crashLogButton, childCount - 1)
+                        } else {
+                            layout.addView(crashLogButton)
+                        }
                     }
                 }
-                mainLayout.addView(crashLogButton)
             }
         } catch (e: Exception) {
             crashLogger.logException(e, "bindViews")
@@ -409,6 +435,62 @@ class MainActivity : AppCompatActivity() {
                     crashLogger.logException(e, "switchSystemApps.onCheckedChange")
                 }
             }
+            
+            // Setup button listeners
+            btnTest.setOnClickListener {
+                try {
+                    crashLogger.logEvent("TestButtonClicked", "Test Module")
+                    // TODO: Implement test functionality
+                    Toast.makeText(this, "Test functionality not implemented yet", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "btnTest.onClick")
+                }
+            }
+            
+            btnLogs.setOnClickListener {
+                try {
+                    crashLogger.logEvent("LogsButtonClicked", "View Logs")
+                    showCrashReportOptions()
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "btnLogs.onClick")
+                }
+            }
+            
+            btnSetup.setOnClickListener {
+                try {
+                    crashLogger.logEvent("SetupButtonClicked", "Setup Guide")
+                    showSetupGuide()
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "btnSetup.onClick")
+                }
+            }
+            
+            btnShareModule.setOnClickListener {
+                try {
+                    crashLogger.logEvent("ShareModuleButtonClicked", "Share Module")
+                    shareModuleApk()
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "btnShareModule.onClick")
+                }
+            }
+            
+            btnLSPatchGuide.setOnClickListener {
+                try {
+                    crashLogger.logEvent("LSPatchGuideButtonClicked", "LSPatch Guide")
+                    showLSPatchGuide()
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "btnLSPatchGuide.onClick")
+                }
+            }
+            
+            btnCheckPermissions.setOnClickListener {
+                try {
+                    crashLogger.logEvent("CheckPermissionsButtonClicked", "Check Permissions")
+                    checkPermissions()
+                } catch (e: Exception) {
+                    crashLogger.logException(e, "btnCheckPermissions.onClick")
+                }
+            }
         } catch (e: Exception) {
             crashLogger.logException(e, "setupListeners")
         }
@@ -458,6 +540,37 @@ class MainActivity : AppCompatActivity() {
             toast("Failed to stop service: ${e.message}")
         }
     }
+    
+    // ---------------- BUTTON HANDLERS ----------------
+    
+    fun onRootModeClicked(v: View) {
+        try {
+            crashLogger.logEvent("RootModeButtonClicked", "Root Mode")
+            // TODO: Implement root mode switch
+            Toast.makeText(this, "Switching to Root Mode", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onRootModeClicked")
+        }
+    }
+    
+    fun onLSPatchModeClicked(v: View) {
+        try {
+            crashLogger.logEvent("LSPatchModeButtonClicked", "LSPatch Mode")
+            // TODO: Implement LSPatch mode switch
+            Toast.makeText(this, "Switching to LSPatch Mode", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onLSPatchModeClicked")
+        }
+    }
+    
+    fun onOpenLSPatchManagerClicked(v: View) {
+        try {
+            crashLogger.logEvent("OpenLSPatchManagerClicked", "Open LSPatch Manager")
+            openLSPatchManager()
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onOpenLSPatchManagerClicked")
+        }
+    }
 
     // ---------------- HELPERS ----------------
 
@@ -501,14 +614,147 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    // Helper function to get app version info from package manager
-    private fun getAppVersionInfo(): Pair<String, Int> {
-        return try {
-            val packageInfo = packageManager.getPackageInfo(packageName, 0)
-            Pair(packageInfo.versionName, packageInfo.versionCode)
+    // ---------------- NEW HELPER METHODS ----------------
+    
+    private fun showSetupGuide() {
+        AlertDialog.Builder(this)
+            .setTitle("Setup Guide")
+            .setMessage(
+                """
+                Rooted Mode:
+                1. Install LSPosed/Xposed framework
+                2. Enable module in LSPosed
+                3. Select target apps
+                4. Reboot device
+                
+                Unrooted Mode:
+                1. Install LSPatch Manager
+                2. Patch target app with this module
+                3. Install patched APK
+                4. Launch patched app
+                """.trimIndent()
+            )
+            .setPositiveButton("OK", null)
+            .show()
+    }
+    
+    private fun shareModuleApk() {
+        try {
+            // Get the APK file path
+            val apkPath = applicationInfo.publicSourceDir
+            val apkFile = File(apkPath)
+            
+            if (apkFile.exists()) {
+                val uri = FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.provider",
+                    apkFile
+                )
+                
+                val shareIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    type = "application/vnd.android.package-archive"
+                    putExtra(Intent.EXTRA_SUBJECT, "Universal Secure Bypass Module")
+                    putExtra(Intent.EXTRA_TEXT, "Check out this Universal Secure Bypass module!")
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                startActivity(Intent.createChooser(shareIntent, "Share Module APK"))
+            } else {
+                Toast.makeText(this, "APK file not found", Toast.LENGTH_SHORT).show()
+            }
         } catch (e: Exception) {
-            crashLogger.logException(e, "getAppVersionInfo")
-            Pair("1.0.0", 1)
+            crashLogger.logException(e, "shareModuleApk")
+            Toast.makeText(this, "Failed to share APK: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun showLSPatchGuide() {
+        AlertDialog.Builder(this)
+            .setTitle("LSPatch Guide")
+            .setMessage(
+                """
+                LSPatch Installation:
+                1. Download LSPatch Manager from GitHub
+                2. Install LSPatch Manager
+                3. Open LSPatch Manager
+                4. Grant necessary permissions
+                
+                Patching Apps:
+                1. Select "Patch APK" or "Patch installed app"
+                2. Choose target app
+                3. Select this module APK
+                4. Install patched APK
+                
+                Note: Some apps may detect and block LSPatch.
+                """.trimIndent()
+            )
+            .setPositiveButton("OK", null)
+            .setNegativeButton("Download LSPatch") { _, _ ->
+                openLSPatchDownload()
+            }
+            .show()
+    }
+    
+    private fun checkPermissions() {
+        val missingPerms = mutableListOf<String>()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                missingPerms.add("Storage")
+            }
+            if (checkSelfPermission(android.Manifest.permission.SYSTEM_ALERT_WINDOW) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                missingPerms.add("Overlay")
+            }
+        }
+        
+        if (missingPerms.isEmpty()) {
+            Toast.makeText(this, "All permissions granted ✅", Toast.LENGTH_SHORT).show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("Missing Permissions")
+                .setMessage("The following permissions are missing:\n\n• ${missingPerms.joinToString("\n• ")}\n\nGrant them in Settings.")
+                .setPositiveButton("Open Settings") { _, _ ->
+                    openAppSettings()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+    
+    private fun openLSPatchManager() {
+        try {
+            val intent = packageManager.getLaunchIntentForPackage("org.lsposed.lspatch")
+            if (intent != null) {
+                startActivity(intent)
+            } else {
+                Toast.makeText(this, "LSPatch Manager not installed", Toast.LENGTH_SHORT).show()
+                openLSPatchDownload()
+            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openLSPatchManager")
+            Toast.makeText(this, "Cannot open LSPatch Manager", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun openLSPatchDownload() {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/LSPosed/LSPatch/releases"))
+            startActivity(intent)
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openLSPatchDownload")
+            Toast.makeText(this, "Cannot open browser", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.parse("package:$packageName")
+            startActivity(intent)
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openAppSettings")
         }
     }
 }
@@ -538,9 +784,6 @@ class CrashLogger private constructor(private val context: Context) {
             try {
                 // Log the crash
                 logException(throwable as Exception, "UncaughtException", thread.name)
-                
-                // Show crash notification
-                showCrashNotification(throwable)
             } catch (e: Exception) {
                 Log.e(MainActivity.TAG, "Error in exception handler", e)
             } finally {
@@ -564,8 +807,12 @@ class CrashLogger private constructor(private val context: Context) {
                     it.write("Thread: $threadName\n")
                     
                     // Get app version info from package manager
-                    val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-                    it.write("App Version: ${packageInfo.versionName} (${packageInfo.versionCode})\n")
+                    try {
+                        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                        it.write("App Version: ${packageInfo.versionName} (${packageInfo.versionCode})\n")
+                    } catch (e: Exception) {
+                        it.write("App Version: Unknown\n")
+                    }
                     
                     it.write("Android API: ${Build.VERSION.SDK_INT}\n")
                     it.write("Device: ${Build.MANUFACTURER} ${Build.MODEL}\n")
@@ -677,10 +924,5 @@ class CrashLogger private constructor(private val context: Context) {
             Log.e(MainActivity.TAG, "Failed to export crash logs", e)
             null
         }
-    }
-    
-    private fun showCrashNotification(exception: Exception) {
-        // You can implement a notification here if needed
-        Log.e(MainActivity.TAG, "Crash occurred: ${exception.message}")
     }
 }
