@@ -34,6 +34,11 @@ class MainActivity : AppCompatActivity() {
         const val CRASH_LOG_PREFIX = "crash_"
         const val MAX_CRASH_LOGS = 10
         const val TAG = "SecureBypass"
+        
+        // Remove BuildConfig references and use app info directly
+        val APP_VERSION_NAME = "1.0.0"  // Hardcode or get from package manager
+        const val APP_VERSION_CODE = 1
+        const val IS_DEBUG = true  // Change based on build type
     }
 
     private lateinit var prefs: SharedPreferences
@@ -52,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var llRootSettings: LinearLayout
     private lateinit var llLSPatchSettings: LinearLayout
     private lateinit var tvLSPatchInfo: TextView
+    private lateinit var mainLayout: LinearLayout  // Added reference
 
     private var spinnerInitialized = false
 
@@ -68,6 +74,9 @@ class MainActivity : AppCompatActivity() {
         try {
             setContentView(R.layout.activity_main)
 
+            // Find main layout
+            mainLayout = findViewById(R.id.mainLayout)
+            
             UniversalSecureBypass.init(applicationContext)
             lspatchHelper = LSPatchHelper(this)
             prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -161,22 +170,27 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
-        val uri = FileProvider.getUriForFile(
-            this,
-            "${packageName}.provider",
-            crashFile
-        )
-        
-        val shareIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "SecureBypass Crash Report")
-            putExtra(Intent.EXTRA_TEXT, "Crash report attached")
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.provider",
+                crashFile
+            )
+            
+            val shareIntent = Intent().apply {
+                action = Intent.ACTION_SEND
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, "SecureBypass Crash Report")
+                putExtra(Intent.EXTRA_TEXT, "Crash report attached")
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            
+            startActivity(Intent.createChooser(shareIntent, "Share Crash Report"))
+        } catch (e: Exception) {
+            crashLogger.logException(e, "shareCrashLog")
+            Toast.makeText(this, "Cannot share crash report: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-        
-        startActivity(Intent.createChooser(shareIntent, "Share Crash Report"))
     }
 
     private fun deleteAllCrashLogs() {
@@ -192,11 +206,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun restartApp() {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-        finish()
-        Process.killProcess(Process.myPid())
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            finish()
+            Process.killProcess(Process.myPid())
+        } catch (e: Exception) {
+            crashLogger.logException(e, "restartApp")
+        }
     }
 
     // ---------------- INIT ----------------
@@ -217,14 +235,14 @@ class MainActivity : AppCompatActivity() {
             tvLSPatchInfo = findViewById(R.id.tvLSPatchInfo)
             
             // Add crash log viewer button if in debug mode
-            if (BuildConfig.DEBUG) {
+            if (IS_DEBUG) {
                 val crashLogButton = Button(this).apply {
                     text = "View Crash Logs"
                     setOnClickListener {
                         showCrashReportOptions()
                     }
                 }
-                findViewById<LinearLayout>(R.id.mainLayout)?.addView(crashLogButton)
+                mainLayout.addView(crashLogButton)
             }
         } catch (e: Exception) {
             crashLogger.logException(e, "bindViews")
@@ -482,6 +500,17 @@ class MainActivity : AppCompatActivity() {
             crashLogger.logException(e, "toast")
         }
     }
+    
+    // Helper function to get app version info from package manager
+    private fun getAppVersionInfo(): Pair<String, Int> {
+        return try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            Pair(packageInfo.versionName, packageInfo.versionCode)
+        } catch (e: Exception) {
+            crashLogger.logException(e, "getAppVersionInfo")
+            Pair("1.0.0", 1)
+        }
+    }
 }
 
 // ---------------- CRASH LOGGER CLASS ----------------
@@ -506,14 +535,18 @@ class CrashLogger private constructor(private val context: Context) {
         val defaultHandler = getDefaultUncaughtExceptionHandler()
         
         setDefaultUncaughtExceptionHandler { thread, throwable ->
-            // Log the crash
-            logException(throwable as Exception, "UncaughtException", thread.name)
-            
-            // Show crash notification
-            showCrashNotification(throwable)
-            
-            // Call original handler
-            defaultHandler?.uncaughtException(thread, throwable)
+            try {
+                // Log the crash
+                logException(throwable as Exception, "UncaughtException", thread.name)
+                
+                // Show crash notification
+                showCrashNotification(throwable)
+            } catch (e: Exception) {
+                Log.e(MainActivity.TAG, "Error in exception handler", e)
+            } finally {
+                // Call original handler
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
         }
     }
     
@@ -529,7 +562,11 @@ class CrashLogger private constructor(private val context: Context) {
                     it.write("Time: ${logFormat.format(Date())}\n")
                     it.write("Source: $source\n")
                     it.write("Thread: $threadName\n")
-                    it.write("App Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n")
+                    
+                    // Get app version info from package manager
+                    val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                    it.write("App Version: ${packageInfo.versionName} (${packageInfo.versionCode})\n")
+                    
                     it.write("Android API: ${Build.VERSION.SDK_INT}\n")
                     it.write("Device: ${Build.MANUFACTURER} ${Build.MODEL}\n")
                     it.write("Rooted: ${UniversalSecureBypass.isRootedMode}\n")
@@ -625,14 +662,17 @@ class CrashLogger private constructor(private val context: Context) {
             val logsDir = File(context.filesDir, MainActivity.CRASH_LOG_DIR)
             if (!logsDir.exists()) return null
             
-            val zipFile = File(context.cacheDir, "crash_logs_${dateFormat.format(Date())}.zip")
-            // Here you would implement zip creation logic
-            // For simplicity, we'll just return the directory
-            FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                logsDir
-            )
+            // Return the latest crash log
+            val latestCrash = getLatestCrashLog()
+            if (latestCrash != null && latestCrash.exists()) {
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.provider",
+                    latestCrash
+                )
+            } else {
+                null
+            }
         } catch (e: Exception) {
             Log.e(MainActivity.TAG, "Failed to export crash logs", e)
             null
