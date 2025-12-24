@@ -3,14 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.flag.secure">
 
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Storage (only if you really need it) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <!-- Foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
 
     <application
         android:allowBackup="true"
@@ -18,20 +16,15 @@
         android:label="Universal Secure Bypass"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-        android:requestLegacyExternalStorage="true"
-        android:usesCleartextTraffic="true"
-        tools:targetApi="31">
-        
-        <meta-data
-            android:name="xposedmodule"
-            android:value="true" />
+        android:usesCleartextTraffic="true">
+
+        <!-- Xposed metadata -->
+        <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data
             android:name="xposeddescription"
             android:value="Universal FLAG_SECURE and DRM bypass for rooted/unrooted devices" />
-        <meta-data
-            android:name="xposedminversion"
-            android:value="90" />
-        
+        <meta-data android:name="xposedminversion" android:value="90" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -41,16 +34,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        
+
         <activity
             android:name=".TestActivity"
             android:exported="false" />
-        
+
         <service
             android:name=".SecureBypassService"
-            android:exported="false" />
-        
-        <!-- FileProvider for sharing crash logs -->
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"
@@ -60,12 +54,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        
-        <!-- Optional: CrashHandler Service -->
-        <service
-            android:name=".CrashHandlerService"
-            android:exported="false"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- REMOVE CrashHandlerService unless truly needed -->
 
     </application>
 
