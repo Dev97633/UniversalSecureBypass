@@ -104,7 +104,7 @@ class UniversalSecureBypass : IXposedHookLoadPackage {
 
         @JvmStatic
         fun onPackageLoaded(lpparam: XC_LoadPackage.LoadPackageParam) {
-            handleLoadPackageInternal(lpparam)
+            
         }
 
         @JvmStatic
