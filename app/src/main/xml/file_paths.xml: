@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internal storage files directory -->
+    <files-path name="files" path="." />
+    <files-path name="crash_logs" path="crash_logs/" />
+    
+    <!-- Internal cache directory -->
+    <cache-path name="cache" path="." />
+    
+    <!-- External storage files directory -->
+    <external-files-path name="external_files" path="." />
+    
+    <!-- External storage cache directory -->
+    <external-cache-path name="external_cache" path="." />
+    
+    <!-- Root of external storage (requires MANAGE_EXTERNAL_STORAGE permission) -->
+    <external-path name="external" path="." />
+    
+    <!-- Root of external SD card -->
+    <external-files-path name="external_storage" path="." />
+</paths>
