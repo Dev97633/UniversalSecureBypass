@@ -264,7 +264,7 @@ class MainActivity : AppCompatActivity() {
                 switchSystemApps.isChecked = false
                 switchSystemApps.isEnabled = false
                 tvInstructions.text =
-                    if (LSPatchHelper.isLSPatchInstalled(this))
+                    if (lspatchHelper.isLSPatchInstalled())
                         "Use LSPatch to embed this module into target apps."
                     else
                         "Install LSPatch Manager to continue."
@@ -277,7 +277,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateLSPatchInfo() {
         try {
             val sb = StringBuilder()
-            val installed = LSPatchHelper.isLSPatchInstalled(this)
+            val installed = lspatchHelper.isLSPatchInstalled()
 
             sb.append("LSPatch: ")
                 .append(if (installed) "Installed ✅" else "Not Installed ❌")
@@ -828,14 +828,3 @@ class CrashLogger private constructor(private val context: Context) {
     }
 }
 
-// ============= LSPATCH HELPER =============
-object LSPatchHelper {
-    fun isLSPatchInstalled(context: Context): Boolean {
-        return try {
-            context.packageManager.getPackageInfo("org.lsposed.lspatch", 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-}
