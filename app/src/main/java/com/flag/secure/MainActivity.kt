@@ -29,13 +29,13 @@ class MainActivity : AppCompatActivity() {
         const val KEY_TARGET_APPS = "target_apps"
         
         const val TAG = "SecureBypass"
-        const val IS_DEBUG = true // Change to false for release builds
+        const val IS_DEBUG = true
     }
 
     private lateinit var prefs: SharedPreferences
     private lateinit var crashLogger: CrashLogger
-    private var forcedMode: String? = null 
     private lateinit var lspatchHelper: LSPatchHelper
+    private var forcedMode: String? = null
 
     // UI Elements
     private lateinit var tvStatus: TextView
@@ -67,12 +67,11 @@ class MainActivity : AppCompatActivity() {
             prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             lspatchHelper = LSPatchHelper(this)
             
-            // SAFE initialization - wrapped in try-catch
+            // SAFE initialization
             try {
-                // This might fail if UniversalSecureBypass isn't implemented
                 UniversalSecureBypass.init(applicationContext)
             } catch (e: Exception) {
-                Log.w(TAG, "UniversalSecureBypass init failed (might be ok): ${e.message}")
+                Log.w(TAG, "UniversalSecureBypass init failed: ${e.message}")
             }
             
             bindViews()
@@ -201,65 +200,184 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ============= APP STATE =============
+    // ============= MODE SWITCHING =============
     private fun refreshState() {
-    try {
-        // Check forced mode first
-        forcedMode = prefs.getString("forced_mode", null)
-        
-        if (forcedMode == "root") {
-            // Force root mode
-            tvMode.text = "Mode: ROOT (LSPosed/Xposed) - MANUAL"
-            showRootUI()
-        } else if (forcedMode == "lspatch") {
-            // Force LSPatch mode  
-            tvMode.text = "Mode: UNROOTED (LSPatch) - MANUAL"
-            showLSPatchUI()
-        } else {
-            // Auto-detect mode
-            val rooted = try {
-                UniversalSecureBypass.isRootedMode
-            } catch (e: Exception) {
-                false
+        try {
+            // Check forced mode first
+            forcedMode = prefs.getString("forced_mode", null)
+            
+            if (forcedMode == "root") {
+                // Force root mode
+                tvMode.text = "Mode: ROOT (LSPosed/Xposed) - MANUAL"
+                showRootUI()
+            } else if (forcedMode == "lspatch") {
+                // Force LSPatch mode  
+                tvMode.text = "Mode: UNROOTED (LSPatch) - MANUAL"
+                showLSPatchUI()
+            } else {
+                // Auto-detect mode
+                val rooted = try {
+                    UniversalSecureBypass.isRootedMode
+                } catch (e: Exception) {
+                    false
+                }
+                
+                if (rooted) {
+                    tvMode.text = "Mode: ROOT (LSPosed/Xposed)"
+                    showRootUI()
+                } else {
+                    tvMode.text = "Mode: UNROOTED (LSPatch)"
+                    showLSPatchUI()
+                }
             }
             
-            if (rooted) {
-                tvMode.text = "Mode: ROOT (LSPosed/Xposed)"
-                showRootUI()
-            } else {
-                tvMode.text = "Mode: UNROOTED (LSPatch)"
-                showLSPatchUI()
-            }
+            updateModuleStatus()
+            updateLSPatchInfo()
+            crashLogger.logEvent("AppStateRefreshed", "forcedMode=$forcedMode")
+        } catch (e: Exception) {
+            crashLogger.logException(e, "refreshState")
         }
-        
-        updateModuleStatus()
-        updateLSPatchInfo()
-        
-    } catch (e: Exception) {
-        crashLogger.logException(e, "refreshState")
     }
-}
 
     private fun showRootUI() {
-    llRootSettings.visibility = LinearLayout.VISIBLE
-    llLSPatchSettings.visibility = LinearLayout.GONE
-    switchSystemApps.isEnabled = true
-    tvInstructions.text = "Rooted mode: enable module in LSPosed and select target apps."
-}
-
-private fun showLSPatchUI() {
-    llRootSettings.visibility = LinearLayout.GONE
-    llLSPatchSettings.visibility = LinearLayout.VISIBLE
-    switchSystemApps.isChecked = false
-    switchSystemApps.isEnabled = false
-    
-    if (lspatchHelper.isLSPatchInstalled()) {
-        tvInstructions.text = "Use LSPatch to embed this module into target apps."
-    } else {
-        tvInstructions.text = "Install LSPatch Manager to continue."
+        llRootSettings.visibility = LinearLayout.VISIBLE
+        llLSPatchSettings.visibility = LinearLayout.GONE
+        switchSystemApps.isEnabled = true
+        tvInstructions.text = "Rooted mode: enable module in LSPosed and select target apps."
     }
-}
 
+    private fun showLSPatchUI() {
+        llRootSettings.visibility = LinearLayout.GONE
+        llLSPatchSettings.visibility = LinearLayout.VISIBLE
+        switchSystemApps.isChecked = false
+        switchSystemApps.isEnabled = false
+        
+        if (lspatchHelper.isLSPatchInstalled()) {
+            tvInstructions.text = "Use LSPatch to embed this module into target apps."
+        } else {
+            tvInstructions.text = "Install LSPatch Manager to continue."
+        }
+    }
+
+    // ============= BUTTON HANDLERS =============
+    fun onRootModeClicked(v: View) {
+        try {
+            crashLogger.logEvent("Mode", "Root mode selected")
+            
+            // Save forced mode
+            prefs.edit().putString("forced_mode", "root").apply()
+            forcedMode = "root"
+            
+            // Update UI
+            tvMode.text = "Mode: ROOT (LSPosed/Xposed) - MANUAL"
+            showRootUI()
+            
+            toast("Root mode activated!")
+            
+            // Show setup guide
+            showRootSetupGuide()
+            
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onRootModeClicked")
+            toast("Error: ${e.message}")
+        }
+    }
+
+    fun onLSPatchModeClicked(v: View) {
+        try {
+            crashLogger.logEvent("Mode", "LSPatch mode selected")
+            
+            // Save forced mode
+            prefs.edit().putString("forced_mode", "lspatch").apply()
+            forcedMode = "lspatch"
+            
+            // Update UI
+            tvMode.text = "Mode: UNROOTED (LSPatch) - MANUAL"
+            showLSPatchUI()
+            
+            toast("LSPatch mode activated!")
+            
+            // Check if LSPatch is installed
+            if (!lspatchHelper.isLSPatchInstalled()) {
+                showLSPatchInstallDialog()
+            }
+            
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onLSPatchModeClicked")
+            toast("Error: ${e.message}")
+        }
+    }
+
+    fun onOpenLSPatchManagerClicked(v: View) {
+        try {
+            crashLogger.logEvent("Button", "Open LSPatch Manager")
+            openLSPatchManager()
+        } catch (e: Exception) {
+            crashLogger.logException(e, "onOpenLSPatchManagerClicked")
+        }
+    }
+
+    // ============= MODE SETUP DIALOGS =============
+    private fun showRootSetupGuide() {
+        AlertDialog.Builder(this)
+            .setTitle("LSPosed/Xposed Setup")
+            .setMessage(
+                """
+                To use Root Mode:
+                
+                1. Install LSPosed/Xposed framework
+                2. Open LSPosed Manager
+                3. Enable this module
+                4. Select target apps
+                5. Reboot device
+                
+                Without root framework, this mode won't work.
+                """.trimIndent()
+            )
+            .setPositiveButton("Got it!", null)
+            .setNegativeButton("Open LSPosed") { _, _ ->
+                openLSPosedManager()
+            }
+            .show()
+    }
+
+    private fun showLSPatchInstallDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("LSPatch Required")
+            .setMessage(
+                """
+                LSPatch Manager is required for this mode.
+                
+                Download from GitHub and install it first.
+                """.trimIndent()
+            )
+            .setPositiveButton("Download") { _, _ ->
+                openLSPatchDownload()
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
+    private fun openLSPosedManager() {
+        try {
+            val intent = packageManager.getLaunchIntentForPackage("org.lsposed.manager")
+            if (intent != null) {
+                startActivity(intent)
+            } else {
+                // Open GitHub if not installed
+                val browserIntent = Intent(
+                    Intent.ACTION_VIEW, 
+                    Uri.parse("https://github.com/LSPosed/LSPosed/releases")
+                )
+                startActivity(browserIntent)
+            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openLSPosedManager")
+            toast("Cannot open LSPosed")
+        }
+    }
+
+    // ============= APP STATE =============
     private fun updateModuleStatus() {
         try {
             val active = isModuleActive()
@@ -284,30 +402,6 @@ private fun showLSPatchUI() {
         } catch (e: Throwable) {
             crashLogger.logException(e as Exception, "isModuleActive")
             false
-        }
-    }
-
-    private fun updateUIForMode(rooted: Boolean) {
-        try {
-            if (rooted) {
-                llRootSettings.visibility = LinearLayout.VISIBLE
-                llLSPatchSettings.visibility = LinearLayout.GONE
-                switchSystemApps.isEnabled = true
-                tvInstructions.text =
-                    "Rooted mode: enable module in LSPosed and select target apps."
-            } else {
-                llRootSettings.visibility = LinearLayout.GONE
-                llLSPatchSettings.visibility = LinearLayout.VISIBLE
-                switchSystemApps.isChecked = false
-                switchSystemApps.isEnabled = false
-                tvInstructions.text =
-                    if (lspatchHelper.isLSPatchInstalled())
-                        "Use LSPatch to embed this module into target apps."
-                    else
-                        "Install LSPatch Manager to continue."
-            }
-        } catch (e: Exception) {
-            crashLogger.logException(e, "updateUIForMode")
         }
     }
 
@@ -409,7 +503,6 @@ private fun showLSPatchUI() {
     fun onStartServiceClicked(v: android.view.View) {
         try {
             crashLogger.logEvent("Service", "Start requested")
-            // Note: You need to implement SecureBypassService for this to work
             toast("Service start requested (service not implemented yet)")
         } catch (e: Exception) {
             crashLogger.logException(e, "onStartServiceClicked")
@@ -427,55 +520,6 @@ private fun showLSPatchUI() {
         }
     }
 
-    // ============= BUTTON HANDLERS =============
-   fun onRootModeClicked(v: View) {
-    try {
-        crashLogger.logEvent("Mode", "Root mode selected")
-        
-        // Save forced mode
-        prefs.edit().putString("forced_mode", "root").apply()
-        forcedMode = "root"
-        
-        // Update UI
-        tvMode.text = "Mode: ROOT (LSPosed/Xposed) - MANUAL"
-        showRootUI()
-        
-        toast("Root mode activated!")
-        
-        // Show setup guide
-        showRootSetupGuide()
-        
-    } catch (e: Exception) {
-        crashLogger.logException(e, "onRootModeClicked")
-        toast("Error: ${e.message}")
-    }
-}
-    
-    fun onLSPatchModeClicked(v: View) {
-    try {
-        crashLogger.logEvent("Mode", "LSPatch mode selected")
-        
-        // Save forced mode
-        prefs.edit().putString("forced_mode", "lspatch").apply()
-        forcedMode = "lspatch"
-        
-        // Update UI
-        tvMode.text = "Mode: UNROOTED (LSPatch) - MANUAL"
-        showLSPatchUI()
-        
-        toast("LSPatch mode activated!")
-        
-        // Check if LSPatch is installed
-        if (!lspatchHelper.isLSPatchInstalled()) {
-            showLSPatchInstallDialog()
-        }
-        
-    } catch (e: Exception) {
-        crashLogger.logException(e, "onLSPatchModeClicked")
-        toast("Error: ${e.message}")
-    }
-}
-    
     // ============= HELPER METHODS =============
     private fun toast(msg: String) {
         try {
@@ -724,7 +768,7 @@ private fun showLSPatchUI() {
     }
 }
 
-// ============= CRASH LOGGER CLASS =============
+// ============= CRASH LOGGER CLASS (OUTSIDE MainActivity) =============
 class CrashLogger private constructor(private val context: Context) {
     
     companion object {
@@ -768,7 +812,6 @@ class CrashLogger private constructor(private val context: Context) {
                     it.write("Source: $source\n")
                     it.write("Thread: $threadName\n")
                     
-                    // Get app version info
                     try {
                         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                         it.write("App Version: ${packageInfo.versionName} (${packageInfo.versionCode})\n")
@@ -787,8 +830,7 @@ class CrashLogger private constructor(private val context: Context) {
                 }
                 
                 Log.e(MainActivity.TAG, "Crash logged: $source", exception)
-                
-                cleanupOldLogs(10) // Keep last 10 logs
+                cleanupOldLogs(10)
                 
             } catch (e: Exception) {
                 Log.e(MainActivity.TAG, "Failed to write crash log", e)
@@ -884,64 +926,4 @@ class CrashLogger private constructor(private val context: Context) {
             null
         }
     }
-
-    private fun showRootSetupGuide() {
-    AlertDialog.Builder(this)
-        .setTitle("LSPosed/Xposed Setup")
-        .setMessage(
-            """
-            To use Root Mode:
-            
-            1. Install LSPosed/Xposed framework
-            2. Open LSPosed Manager
-            3. Enable this module
-            4. Select target apps
-            5. Reboot device
-            
-            Without root framework, this mode won't work.
-            """.trimIndent()
-        )
-        .setPositiveButton("Got it!", null)
-        .setNegativeButton("Open LSPosed") { _, _ ->
-            openLSPosedManager()
-        }
-        .show()
 }
-
-private fun showLSPatchInstallDialog() {
-    AlertDialog.Builder(this)
-        .setTitle("LSPatch Required")
-        .setMessage(
-            """
-            LSPatch Manager is required for this mode.
-            
-            Download from GitHub and install it first.
-            """.trimIndent()
-        )
-        .setPositiveButton("Download") { _, _ ->
-            openLSPatchDownload()
-        }
-        .setNegativeButton("Later", null)
-        .show()
-}
-
-private fun openLSPosedManager() {
-    try {
-        val intent = packageManager.getLaunchIntentForPackage("org.lsposed.manager")
-        if (intent != null) {
-            startActivity(intent)
-        } else {
-            // Open GitHub if not installed
-            val browserIntent = Intent(
-                Intent.ACTION_VIEW, 
-                Uri.parse("https://github.com/LSPosed/LSPosed/releases")
-            )
-            startActivity(browserIntent)
-        }
-    } catch (e: Exception) {
-        crashLogger.logException(e, "openLSPosedManager")
-        toast("Cannot open LSPosed")
-    }
-}
-}
-
