@@ -367,7 +367,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun openLSPosedManager() {
         try {
-            val intent = packageManager.getLaunchIntentForPackage("org.lsposed.manager")
+            val intent = packageManager.getLaunchIntentForPackage("io.github.jingmatrix.lspatch")
             if (intent != null) {
                 startActivity(intent)
             } else {
