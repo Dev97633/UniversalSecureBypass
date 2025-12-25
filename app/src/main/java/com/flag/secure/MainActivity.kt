@@ -414,46 +414,36 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateLSPatchInfo() {
     try {
-        val sb = StringBuilder()
-        val installed = lspatchHelper.isLSPatchInstalled()
-        val packageName = lspatchHelper.getLSPatchPackageName()
-
-        sb.append("LSPatch: ")
-            .append(if (installed) "Installed ✅" else "Not Installed ❌")
-            .append("\n")
+        val debugInfo = lspatchHelper.debugCheckAllPackages()
+        val status = lspatchHelper.getStatusString()
         
-        if (installed && packageName != null) {
-            sb.append("Version: ").append(packageName).append("\n\n")
-        } else {
-            sb.append("\n")
+        val sb = StringBuilder()
+        sb.append("LSPatch Status:\n")
+        sb.append(status)
+        sb.append("\n\n")
+        sb.append("For Jingmatrix Fork:\n")
+        sb.append("1. Open LSPatch Manager\n")
+        sb.append("2. Select target app\n")
+        sb.append("3. Choose this module\n")
+        sb.append("4. Install patched APK\n")
+        
+        // Add debug info in development mode
+        if (BuildConfig.DEBUG) {
+            sb.append("\n\n=== DEBUG INFO ===\n")
+            sb.append(debugInfo)
         }
-
-        if (installed) {
-            sb.append(
-                """
-                Steps:
-                1. Open LSPatch Manager
-                2. Patch target app
-                3. Select this module APK
-                4. Install patched APK
-                """.trimIndent()
-            )
-        } else {
-            sb.append(
-                """
-                Install Jingmatrix LSPatch Fork:
-                https://github.com/JingMatrix/LSPatch
-                """.trimIndent()
-            )
-        }
-
+        
         tvLSPatchInfo.text = sb.toString()
+        
+        // Log to console
+        Log.d("MainActivity", "LSPatch Debug Info:\n$debugInfo")
+        
     } catch (e: Exception) {
-        crashLogger.logException(e, "updateLSPatchInfo")
-        tvLSPatchInfo.text = "Error loading LSPatch info"
+        tvLSPatchInfo.text = "Error checking LSPatch"
+        Log.e("MainActivity", "Error in updateLSPatchInfo: ${e.message}")
     }
 }
-
+    
     // ============= SETTINGS & LISTENERS =============
     private fun setupListeners() {
         try {
@@ -666,15 +656,39 @@ class MainActivity : AppCompatActivity() {
     
     private fun openLSPatchManager() {
     try {
+        Log.d("MainActivity", "Opening LSPatch Manager...")
+        
         if (lspatchHelper.openLSPatchManager()) {
-            toast("Opened LSPatch Manager")
+            toast("Opening LSPatch Manager...")
         } else {
-            toast("LSPatch Manager not found")
-            openOriginalLSPatchDownload()
+            val debugInfo = lspatchHelper.debugCheckAllPackages()
+            Log.d("MainActivity", "Failed to open. Debug:\n$debugInfo")
+            
+            AlertDialog.Builder(this)
+                .setTitle("LSPatch Manager Not Found")
+                .setMessage(
+                    """
+                    Cannot open LSPatch Manager.
+                    
+                    Debug Info:
+                    $debugInfo
+                    
+                    Make sure Jingmatrix LSPatch is installed:
+                    $JINGMATRIX_URL
+                    """.trimIndent()
+                )
+                .setPositiveButton("Download") { _, _ ->
+                    openJingmatrixLSPatchDownload()
+                }
+                .setNegativeButton("Test Again") { _, _ ->
+                    updateLSPatchInfo()
+                }
+                .setNeutralButton("Cancel", null)
+                .show()
         }
     } catch (e: Exception) {
-        crashLogger.logException(e, "openLSPatchManager")
-        toast("Cannot open LSPatch Manager")
+        Log.e("MainActivity", "Error opening LSPatch: ${e.message}")
+        toast("Error: ${e.message}")
     }
 }
     
