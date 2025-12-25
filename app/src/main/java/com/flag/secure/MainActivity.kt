@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.widget.*
@@ -31,6 +32,11 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "SecureBypass"
         const val IS_DEBUG = true
         const val JINGMATRIX_URL = "https://github.com/JingMatrix/LSPatch/releases"
+        
+        // Permission request codes
+        const val PERMISSION_REQUEST_CODE = 1001
+        const val OVERLAY_PERMISSION_REQUEST_CODE = 1002
+        const val INSTALL_PERMISSION_REQUEST_CODE = 1003
     }
 
     private lateinit var prefs: SharedPreferences
@@ -64,6 +70,9 @@ class MainActivity : AppCompatActivity() {
         
         try {
             setContentView(R.layout.activity_main)
+            
+            // AUTO-REQUEST PERMISSIONS ON START
+            requestAllPermissions()
             
             prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             lspatchHelper = LSPatchHelper(this)
@@ -101,6 +110,144 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         crashLogger.logEvent("AppDestroyed", "MainActivity.onDestroy()")
         super.onDestroy()
+    }
+
+    // ============= PERMISSION HANDLING =============
+    private fun requestAllPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+        
+        // 1. Request Storage Permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != 
+                android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                permissionsToRequest.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+        
+        // 2. Request Overlay Permission (special permission)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                showOverlayPermissionDialog()
+            }
+        }
+        
+        // 3. Request Install Unknown Apps (special permission)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                showInstallPermissionDialog()
+            }
+        }
+        
+        // Request regular permissions
+        if (permissionsToRequest.isNotEmpty()) {
+            requestPermissions(
+                permissionsToRequest.toTypedArray(),
+                PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    private fun showOverlayPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Overlay Permission Required")
+            .setMessage(
+                """
+                LSPatch needs overlay permission to work properly.
+                
+                This allows LSPatch to display floating windows
+                and work with other apps.
+                
+                Tap "Grant" to open settings.
+                """.trimIndent()
+            )
+            .setPositiveButton("Grant") { _, _ ->
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+                intent.data = Uri.parse("package:$packageName")
+                startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST_CODE)
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
+    private fun showInstallPermissionDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Install Unknown Apps Permission")
+            .setMessage(
+                """
+                To install patched APKs, you need to allow
+                "Install unknown apps" permission.
+                
+                This is required for LSPatch to install
+                modified applications.
+                
+                Tap "Allow" to open settings.
+                """.trimIndent()
+            )
+            .setPositiveButton("Allow") { _, _ ->
+                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                intent.data = Uri.parse("package:$packageName")
+                startActivityForResult(intent, INSTALL_PERMISSION_REQUEST_CODE)
+            }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            var allGranted = true
+            
+            for (i in grantResults.indices) {
+                if (grantResults[i] != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "Permission denied: ${permissions[i]}")
+                    allGranted = false
+                } else {
+                    Log.d(TAG, "Permission granted: ${permissions[i]}")
+                }
+            }
+            
+            if (allGranted) {
+                toast("All permissions granted! ✅")
+                // Refresh LSPatch detection now
+                refreshState()
+            } else {
+                toast("Some permissions were denied")
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        when (requestCode) {
+            OVERLAY_PERMISSION_REQUEST_CODE -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    if (Settings.canDrawOverlays(this)) {
+                        toast("Overlay permission granted! ✅")
+                    } else {
+                        toast("Overlay permission denied")
+                    }
+                }
+            }
+            INSTALL_PERMISSION_REQUEST_CODE -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    if (packageManager.canRequestPackageInstalls()) {
+                        toast("Install permission granted! ✅")
+                    } else {
+                        toast("Install permission denied")
+                    }
+                }
+            }
+        }
+        
+        // Refresh after permission changes
+        refreshState()
     }
 
     // ============= UI SETUP =============
@@ -143,6 +290,22 @@ class MainActivity : AppCompatActivity() {
             findViewById<Button>(R.id.btnCheckPermissions)?.setOnClickListener {
                 checkPermissions()
             }
+            
+            // Add permission fix button
+            val permissionButton = Button(this).apply {
+                text = "🔧 Fix Permissions"
+                setOnClickListener {
+                    requestAllPermissions()
+                }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = 16
+                    bottomMargin = 16
+                }
+            }
+            llLSPatchSettings.addView(permissionButton)
             
             // Add test button for debugging
             if (IS_DEBUG) {
