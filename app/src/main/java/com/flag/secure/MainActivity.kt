@@ -631,7 +631,7 @@ class MainActivity : AppCompatActivity() {
             )
             .setPositiveButton("OK", null)
             .setNegativeButton("Download LSPatch") { _, _ ->
-                openLSPatchDownload()
+                openOriginalLSPatchDownload()
             }
             .show()
     }
@@ -670,7 +670,7 @@ class MainActivity : AppCompatActivity() {
             toast("Opened LSPatch Manager")
         } else {
             toast("LSPatch Manager not found")
-            openLSPatchDownload()
+            openOriginalLSPatchDownload()
         }
     } catch (e: Exception) {
         crashLogger.logException(e, "openLSPatchManager")
