@@ -20,17 +20,18 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        const val PREFS_NAME = "SecureBypassPrefs"
-        const val KEY_BYPASS_FLAG_SECURE = "bypass_flag_secure"
-        const val KEY_BYPASS_DRM = "bypass_drm"
-        const val KEY_BYPASS_BLACK_SCREEN = "bypass_black_screen"
-        const val KEY_SHOW_NOTIFICATIONS = "show_notifications"
-        const val KEY_SYSTEM_APPS = "system_apps"
-        const val KEY_TARGET_APPS = "target_apps"
-        
-        const val TAG = "SecureBypass"
-        const val IS_DEBUG = true
-    }
+    const val PREFS_NAME = "SecureBypassPrefs"
+    const val KEY_BYPASS_FLAG_SECURE = "bypass_flag_secure"
+    const val KEY_BYPASS_DRM = "bypass_drm"
+    const val KEY_BYPASS_BLACK_SCREEN = "bypass_black_screen"
+    const val KEY_SHOW_NOTIFICATIONS = "show_notifications"
+    const val KEY_SYSTEM_APPS = "system_apps"
+    const val KEY_TARGET_APPS = "target_apps"
+    
+    const val TAG = "SecureBypass"
+    const val IS_DEBUG = true
+    const val JINGMATRIX_URL = "https://github.com/JingMatrix/LSPatch/releases"
+}
 
     private lateinit var prefs: SharedPreferences
     private lateinit var crashLogger: CrashLogger
@@ -286,6 +287,29 @@ class MainActivity : AppCompatActivity() {
     fun onLSPatchModeClicked(v: View) {
         try {
             crashLogger.logEvent("Mode", "LSPatch mode selected")
+            fun testLSPatchDetection(view: View) {
+    try {
+        val debugInfo = lspatchHelper.debugCheckAllPackages()
+        
+        AlertDialog.Builder(this)
+            .setTitle("LSPatch Detection Test")
+            .setMessage(debugInfo)
+            .setPositiveButton("OK", null)
+            .setNegativeButton("Copy") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clip = android.content.ClipData.newPlainText("Debug", debugInfo)
+                clipboard.setPrimaryClip(clip)
+                toast("Copied to clipboard")
+            }
+            .show()
+            
+        Log.d("MainActivity", "LSPatch Test:\n$debugInfo")
+    } catch (e: Exception) {
+        toast("Test failed: ${e.message}")
+    }
+}
+
+            
             
             // Save forced mode
             prefs.edit().putString("forced_mode", "lspatch").apply()
@@ -366,23 +390,40 @@ class MainActivity : AppCompatActivity() {
 }
 
     private fun openLSPosedManager() {
-        try {
-            val intent = packageManager.getLaunchIntentForPackage("io.github.jingmatrix.lspatch")
-            if (intent != null) {
-                startActivity(intent)
-            } else {
-                // Open GitHub if not installed
-                val browserIntent = Intent(
-                    Intent.ACTION_VIEW, 
-                    Uri.parse("https://github.com/LSPosed/LSPosed/releases")
-                )
-                startActivity(browserIntent)
+    try {
+        // LSPosed package names
+        val lsposedPackages = listOf(
+            "org.lsposed.manager",  // Main LSPosed Manager
+            "de.robv.android.xposed.installer"  // Original Xposed
+        )
+        
+        var intent: Intent? = null
+        
+        for (pkg in lsposedPackages) {
+            try {
+                packageManager.getPackageInfo(pkg, 0)
+                intent = packageManager.getLaunchIntentForPackage(pkg)
+                if (intent != null) break
+            } catch (e: Exception) {
+                // Package not found, try next
             }
-        } catch (e: Exception) {
-            crashLogger.logException(e, "openLSPosedManager")
-            toast("Cannot open LSPosed")
         }
+        
+        if (intent != null) {
+            startActivity(intent)
+        } else {
+            // Open LSPosed GitHub page
+            val browserIntent = Intent(
+                Intent.ACTION_VIEW, 
+                Uri.parse("https://github.com/LSPosed/LSPosed/releases")
+            )
+            startActivity(browserIntent)
+        }
+    } catch (e: Exception) {
+        crashLogger.logException(e, "openLSPosedManager")
+        toast("Cannot open LSPosed")
     }
+}
 
     // ============= APP STATE =============
     private fun updateModuleStatus() {
@@ -428,7 +469,7 @@ class MainActivity : AppCompatActivity() {
         sb.append("4. Install patched APK\n")
         
         // Add debug info in development mode
-        if (BuildConfig.DEBUG) {
+        if (IS_DEBUG) {
             sb.append("\n\n=== DEBUG INFO ===\n")
             sb.append(debugInfo)
         }
