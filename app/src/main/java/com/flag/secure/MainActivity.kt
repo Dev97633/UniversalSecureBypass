@@ -20,18 +20,18 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity() {
 
     companion object {
-    const val PREFS_NAME = "SecureBypassPrefs"
-    const val KEY_BYPASS_FLAG_SECURE = "bypass_flag_secure"
-    const val KEY_BYPASS_DRM = "bypass_drm"
-    const val KEY_BYPASS_BLACK_SCREEN = "bypass_black_screen"
-    const val KEY_SHOW_NOTIFICATIONS = "show_notifications"
-    const val KEY_SYSTEM_APPS = "system_apps"
-    const val KEY_TARGET_APPS = "target_apps"
-    
-    const val TAG = "SecureBypass"
-    const val IS_DEBUG = true
-    const val JINGMATRIX_URL = "https://github.com/JingMatrix/LSPatch/releases"
-}
+        const val PREFS_NAME = "SecureBypassPrefs"
+        const val KEY_BYPASS_FLAG_SECURE = "bypass_flag_secure"
+        const val KEY_BYPASS_DRM = "bypass_drm"
+        const val KEY_BYPASS_BLACK_SCREEN = "bypass_black_screen"
+        const val KEY_SHOW_NOTIFICATIONS = "show_notifications"
+        const val KEY_SYSTEM_APPS = "system_apps"
+        const val KEY_TARGET_APPS = "target_apps"
+        
+        const val TAG = "SecureBypass"
+        const val IS_DEBUG = true
+        const val JINGMATRIX_URL = "https://github.com/JingMatrix/LSPatch/releases"
+    }
 
     private lateinit var prefs: SharedPreferences
     private lateinit var crashLogger: CrashLogger
@@ -142,6 +142,23 @@ class MainActivity : AppCompatActivity() {
             
             findViewById<Button>(R.id.btnCheckPermissions)?.setOnClickListener {
                 checkPermissions()
+            }
+            
+            // Add test button for debugging
+            if (IS_DEBUG) {
+                val testButton = Button(this).apply {
+                    text = "Test LSPatch Detection"
+                    setOnClickListener { testLSPatchDetection(it) }
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = 16
+                    }
+                }
+                
+                // Add to LSPatch settings layout
+                llLSPatchSettings.addView(testButton)
             }
             
         } catch (e: Exception) {
@@ -287,29 +304,6 @@ class MainActivity : AppCompatActivity() {
     fun onLSPatchModeClicked(v: View) {
         try {
             crashLogger.logEvent("Mode", "LSPatch mode selected")
-            fun testLSPatchDetection(view: View) {
-    try {
-        val debugInfo = lspatchHelper.debugCheckAllPackages()
-        
-        AlertDialog.Builder(this)
-            .setTitle("LSPatch Detection Test")
-            .setMessage(debugInfo)
-            .setPositiveButton("OK", null)
-            .setNegativeButton("Copy") { _, _ ->
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("Debug", debugInfo)
-                clipboard.setPrimaryClip(clip)
-                toast("Copied to clipboard")
-            }
-            .show()
-            
-        Log.d("MainActivity", "LSPatch Test:\n$debugInfo")
-    } catch (e: Exception) {
-        toast("Test failed: ${e.message}")
-    }
-}
-
-            
             
             // Save forced mode
             prefs.edit().putString("forced_mode", "lspatch").apply()
@@ -366,64 +360,64 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showLSPatchInstallDialog() {
-    AlertDialog.Builder(this)
-        .setTitle("LSPatch Required")
-        .setMessage(
-            """
-            LSPatch Manager is required for this mode.
-            
-            Recommended: Jingmatrix LSPatch Fork
-            (Better compatibility with newer Android)
-            
-            Download from:
-            https://github.com/JingMatrix/LSPatch
-            """.trimIndent()
-        )
-        .setPositiveButton("Download") { _, _ ->
-            openJingmatrixLSPatchDownload()
-        }
-        .setNegativeButton("Original LSPatch") { _, _ ->
-            openOriginalLSPatchDownload()
-        }
-        .setNeutralButton("Later", null)
-        .show()
-}
+        AlertDialog.Builder(this)
+            .setTitle("LSPatch Required")
+            .setMessage(
+                """
+                LSPatch Manager is required for this mode.
+                
+                Recommended: Jingmatrix LSPatch Fork
+                (Better compatibility with newer Android)
+                
+                Download from:
+                https://github.com/JingMatrix/LSPatch
+                """.trimIndent()
+            )
+            .setPositiveButton("Download") { _, _ ->
+                openJingmatrixLSPatchDownload()
+            }
+            .setNegativeButton("Original LSPatch") { _, _ ->
+                openOriginalLSPatchDownload()
+            }
+            .setNeutralButton("Later", null)
+            .show()
+    }
 
     private fun openLSPosedManager() {
-    try {
-        // LSPosed package names
-        val lsposedPackages = listOf(
-            "org.lsposed.manager",  // Main LSPosed Manager
-            "de.robv.android.xposed.installer"  // Original Xposed
-        )
-        
-        var intent: Intent? = null
-        
-        for (pkg in lsposedPackages) {
-            try {
-                packageManager.getPackageInfo(pkg, 0)
-                intent = packageManager.getLaunchIntentForPackage(pkg)
-                if (intent != null) break
-            } catch (e: Exception) {
-                // Package not found, try next
-            }
-        }
-        
-        if (intent != null) {
-            startActivity(intent)
-        } else {
-            // Open LSPosed GitHub page
-            val browserIntent = Intent(
-                Intent.ACTION_VIEW, 
-                Uri.parse("https://github.com/LSPosed/LSPosed/releases")
+        try {
+            // LSPosed package names
+            val lsposedPackages = listOf(
+                "org.lsposed.manager",  // Main LSPosed Manager
+                "de.robv.android.xposed.installer"  // Original Xposed
             )
-            startActivity(browserIntent)
+            
+            var intent: Intent? = null
+            
+            for (pkg in lsposedPackages) {
+                try {
+                    packageManager.getPackageInfo(pkg, 0)
+                    intent = packageManager.getLaunchIntentForPackage(pkg)
+                    if (intent != null) break
+                } catch (e: Exception) {
+                    // Package not found, try next
+                }
+            }
+            
+            if (intent != null) {
+                startActivity(intent)
+            } else {
+                // Open LSPosed GitHub page
+                val browserIntent = Intent(
+                    Intent.ACTION_VIEW, 
+                    Uri.parse("https://github.com/LSPosed/LSPosed/releases")
+                )
+                startActivity(browserIntent)
+            }
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openLSPosedManager")
+            toast("Cannot open LSPosed")
         }
-    } catch (e: Exception) {
-        crashLogger.logException(e, "openLSPosedManager")
-        toast("Cannot open LSPosed")
     }
-}
 
     // ============= APP STATE =============
     private fun updateModuleStatus() {
@@ -454,36 +448,60 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateLSPatchInfo() {
-    try {
-        val debugInfo = lspatchHelper.debugCheckAllPackages()
-        val status = lspatchHelper.getStatusString()
-        
-        val sb = StringBuilder()
-        sb.append("LSPatch Status:\n")
-        sb.append(status)
-        sb.append("\n\n")
-        sb.append("For Jingmatrix Fork:\n")
-        sb.append("1. Open LSPatch Manager\n")
-        sb.append("2. Select target app\n")
-        sb.append("3. Choose this module\n")
-        sb.append("4. Install patched APK\n")
-        
-        // Add debug info in development mode
-        if (IS_DEBUG) {
-            sb.append("\n\n=== DEBUG INFO ===\n")
-            sb.append(debugInfo)
+        try {
+            // Get debug info from LSPatchHelper
+            val debugInfo = lspatchHelper.debugCheckAllPackages()
+            val status = lspatchHelper.getStatusString()
+            
+            val sb = StringBuilder()
+            sb.append("LSPatch Status:\n")
+            sb.append(status)
+            sb.append("\n\n")
+            sb.append("For Jingmatrix Fork:\n")
+            sb.append("1. Open LSPatch Manager\n")
+            sb.append("2. Select target app\n")
+            sb.append("3. Choose this module\n")
+            sb.append("4. Install patched APK\n")
+            
+            // Add debug info in development mode
+            if (IS_DEBUG) {
+                sb.append("\n\n=== DEBUG INFO ===\n")
+                sb.append(debugInfo)
+            }
+            
+            tvLSPatchInfo.text = sb.toString()
+            
+            // Log to console
+            Log.d("MainActivity", "LSPatch Debug Info:\n$debugInfo")
+            
+        } catch (e: Exception) {
+            tvLSPatchInfo.text = "Error checking LSPatch"
+            Log.e("MainActivity", "Error in updateLSPatchInfo: ${e.message}", e)
         }
-        
-        tvLSPatchInfo.text = sb.toString()
-        
-        // Log to console
-        Log.d("MainActivity", "LSPatch Debug Info:\n$debugInfo")
-        
-    } catch (e: Exception) {
-        tvLSPatchInfo.text = "Error checking LSPatch"
-        Log.e("MainActivity", "Error in updateLSPatchInfo: ${e.message}")
     }
-}
+    
+    // ============= LSPATCH DETECTION TEST =============
+    fun testLSPatchDetection(view: View) {
+        try {
+            val debugInfo = lspatchHelper.debugCheckAllPackages()
+            
+            AlertDialog.Builder(this)
+                .setTitle("LSPatch Detection Test")
+                .setMessage(debugInfo)
+                .setPositiveButton("OK", null)
+                .setNegativeButton("Copy") { _, _ ->
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Debug", debugInfo)
+                    clipboard.setPrimaryClip(clip)
+                    toast("Copied to clipboard")
+                }
+                .show()
+                
+            Log.d("MainActivity", "LSPatch Test:\n$debugInfo")
+        } catch (e: Exception) {
+            toast("Test failed: ${e.message}")
+        }
+    }
     
     // ============= SETTINGS & LISTENERS =============
     private fun setupListeners() {
@@ -696,64 +714,64 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun openLSPatchManager() {
-    try {
-        Log.d("MainActivity", "Opening LSPatch Manager...")
-        
-        if (lspatchHelper.openLSPatchManager()) {
-            toast("Opening LSPatch Manager...")
-        } else {
-            val debugInfo = lspatchHelper.debugCheckAllPackages()
-            Log.d("MainActivity", "Failed to open. Debug:\n$debugInfo")
+        try {
+            Log.d("MainActivity", "Opening LSPatch Manager...")
             
-            AlertDialog.Builder(this)
-                .setTitle("LSPatch Manager Not Found")
-                .setMessage(
-                    """
-                    Cannot open LSPatch Manager.
-                    
-                    Debug Info:
-                    $debugInfo
-                    
-                    Make sure Jingmatrix LSPatch is installed:
-                    $JINGMATRIX_URL
-                    """.trimIndent()
-                )
-                .setPositiveButton("Download") { _, _ ->
-                    openJingmatrixLSPatchDownload()
-                }
-                .setNegativeButton("Test Again") { _, _ ->
-                    updateLSPatchInfo()
-                }
-                .setNeutralButton("Cancel", null)
-                .show()
+            if (lspatchHelper.openLSPatchManager()) {
+                toast("Opening LSPatch Manager...")
+            } else {
+                val debugInfo = lspatchHelper.debugCheckAllPackages()
+                Log.d("MainActivity", "Failed to open. Debug:\n$debugInfo")
+                
+                AlertDialog.Builder(this)
+                    .setTitle("LSPatch Manager Not Found")
+                    .setMessage(
+                        """
+                        Cannot open LSPatch Manager.
+                        
+                        Debug Info:
+                        $debugInfo
+                        
+                        Make sure Jingmatrix LSPatch is installed:
+                        $JINGMATRIX_URL
+                        """.trimIndent()
+                    )
+                    .setPositiveButton("Download") { _, _ ->
+                        openJingmatrixLSPatchDownload()
+                    }
+                    .setNegativeButton("Test Again") { _, _ ->
+                        updateLSPatchInfo()
+                    }
+                    .setNeutralButton("Cancel", null)
+                    .show()
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error opening LSPatch: ${e.message}")
+            toast("Error: ${e.message}")
         }
-    } catch (e: Exception) {
-        Log.e("MainActivity", "Error opening LSPatch: ${e.message}")
-        toast("Error: ${e.message}")
     }
-}
     
     private fun openJingmatrixLSPatchDownload() {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW, 
-            Uri.parse("https://github.com/JingMatrix/LSPatch/releases"))
-        startActivity(intent)
-    } catch (e: Exception) {
-        crashLogger.logException(e, "openJingmatrixLSPatchDownload")
-        toast("Cannot open browser")
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, 
+                Uri.parse("https://github.com/JingMatrix/LSPatch/releases"))
+            startActivity(intent)
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openJingmatrixLSPatchDownload")
+            toast("Cannot open browser")
+        }
     }
-}
 
-private fun openOriginalLSPatchDownload() {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW, 
-            Uri.parse("https://github.com/LSPosed/LSPatch/releases"))
-        startActivity(intent)
-    } catch (e: Exception) {
-        crashLogger.logException(e, "openOriginalLSPatchDownload")
-        toast("Cannot open browser")
+    private fun openOriginalLSPatchDownload() {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, 
+                Uri.parse("https://github.com/LSPosed/LSPatch/releases"))
+            startActivity(intent)
+        } catch (e: Exception) {
+            crashLogger.logException(e, "openOriginalLSPatchDownload")
+            toast("Cannot open browser")
+        }
     }
-}
     
     private fun openAppSettings() {
         try {
